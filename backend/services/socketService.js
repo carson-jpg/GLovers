@@ -15,7 +15,11 @@ class SocketService {
   initialize(server) {
     this.io = new Server(server, {
       cors: {
-        origin: process.env.FRONTEND_URL || ['http://localhost:8080'],
+        origin: [
+          process.env.FRONTEND_URL,
+          'https://g-lovers.vercel.app',
+          'http://localhost:8080'
+        ].filter(Boolean),
         credentials: true
       }
     });

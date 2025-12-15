@@ -56,9 +56,9 @@ class SocketService {
 
     // Get the API base URL by removing '/api' from the client URL
     const client = (apiClient as any);
-    const apiBaseUrl = client.baseURL || 'http://localhost:5000/api';
-    console.log('Connecting to socket URL:', apiBaseUrl.replace('/api', '') || 'http://localhost:5000');
-    const socketUrl = apiBaseUrl.replace('/api', '') || 'http://localhost:5000';
+    const apiBaseUrl = client.baseURL || 'https://glovers.onrender.com/api';
+    console.log('Connecting to socket URL:', apiBaseUrl.replace('/api', '') || 'https://glovers.onrender.com');
+    const socketUrl = apiBaseUrl.replace('/api', '') || 'https://glovers.onrender.com';
 
     this.socket = io(socketUrl, {
       auth: {
