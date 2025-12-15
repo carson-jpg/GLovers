@@ -164,7 +164,9 @@ export default function Chat() {
 
   const acknowledgeUnreadMessages = (msgs: Message[]) => {
     msgs.forEach(message => {
-      if (message.senderId !== user?.id && message.deliveryStatus !== 'delivered') {
+      // Use the same robust comparison function
+      const isOwn = isOwnMessage(message);
+      if (!isOwn && message.deliveryStatus !== 'delivered') {
         socketService.acknowledgeMessageDelivery(chatId!, message._id);
       }
     });
@@ -217,7 +219,11 @@ export default function Chat() {
 
   const handleMessagesRead = (data: { chatId: string; userId: string }) => {
     if (data.chatId === chatId && data.userId !== user?.id) {
-      setMessages(prev => prev.map(msg => msg.senderId === user?.id ? { ...msg, deliveryStatus: 'read' } : msg));
+      setMessages(prev => prev.map(msg => {
+        // Check if this message was sent by the current user
+        const isOwn = isOwnMessage(msg);
+        return isOwn ? { ...msg, deliveryStatus: 'read' } : msg;
+      }));
     }
   };
 
@@ -322,6 +328,23 @@ export default function Chat() {
     return status?.status || 'offline';
   };
 
+  // Helper function to compare user IDs safely
+  const isOwnMessage = (message: Message): boolean => {
+    if (!user?.id) return false;
+    
+    // Compare senderId directly
+    if (String(message.senderId) === String(user.id)) {
+      return true;
+    }
+    
+    // Compare with populated sender object
+    if (message.sender && String(message.sender._id) === String(user.id)) {
+      return true;
+    }
+    
+    return false;
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#e5ddd5]">
@@ -402,8 +425,7 @@ export default function Chat() {
         ) : (
           <div className="max-w-[900px] mx-auto space-y-2">
             {messages.map((message, index) => {
-              // Fix ID comparison - handle different formats (string vs object)
-              const isOwn = String(message.senderId) === String(user?.id);
+              const isOwn = isOwnMessage(message);
               const showDate = index === 0 || formatDate(message.timestamp) !== formatDate(messages[index - 1].timestamp);
               
               console.log('Message:', message.content, 'isOwn:', isOwn, 'senderId:', message.senderId, 'userId:', user?.id);
