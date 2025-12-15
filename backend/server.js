@@ -2,7 +2,6 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import bodyParser from 'body-parser';
 import { createServer } from 'http';
 import connectDB from './config/database.js';
 import socketService from './services/socketService.js';
@@ -29,42 +28,9 @@ const server = createServer(app);
 // Initialize Socket.IO
 socketService.initialize(server);
 
-// Raw body parser for all requests
-app.use(bodyParser.raw({
-  type: '*/*',
-  limit: '10mb'
-}));
-
-// Ultra-safe JSON parsing middleware
-app.use((req, res, next) => {
-  const contentType = req.headers['content-type'] || '';
-  
-  // Skip ALL parsing for multipart form data
-  if (contentType.includes('multipart/form-data')) {
-    console.log('Skipping parsing for multipart request');
-    return next();
-  }
-  
-  // Only attempt JSON parsing if we have body data and it's clearly JSON
-  if (contentType.includes('application/json') && req.body && req.body.length > 0) {
-    try {
-      // Check if body looks like JSON before parsing
-      const bodyStr = req.body.toString('utf8').trim();
-      if (bodyStr.startsWith('{') || bodyStr.startsWith('[')) {
-        req.body = JSON.parse(bodyStr);
-      } else {
-        console.log('Body does not appear to be JSON:', bodyStr.substring(0, 50));
-      }
-    } catch (error) {
-      console.error('JSON parsing error:', error.message);
-      console.log('Attempted to parse:', req.body.toString('utf8').substring(0, 100));
-      // Don't send error response, just log and continue
-      // This prevents the request from failing
-    }
-  }
-  
-  next();
-});
+// Standard body parsing middleware - handles both JSON and leaves multipart for route-level multer
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Cookie parser middleware
 app.use(cookieParser());
