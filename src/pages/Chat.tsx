@@ -348,16 +348,16 @@ export default function Chat() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#e5ddd5]">
-        <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
+      <div className="min-h-screen flex items-center justify-center bg-[#fdf2f8]">
+        <Loader2 className="w-8 h-8 animate-spin text-red-600" />
       </div>
     );
   }
 
   if (chatError) {
     return (
-      <div className="min-h-screen bg-[#e5ddd5] flex flex-col">
-        <div className="bg-[#075e54] sticky top-0 z-50">
+      <div className="min-h-screen bg-[#fdf2f8] flex flex-col">
+        <div className="bg-[#dc2626] sticky top-0 z-50">
           <div className="max-w-screen-xl mx-auto px-4 py-2.5 flex items-center">
             <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="text-white">
               <ArrowLeft className="w-5 h-5" />
@@ -369,7 +369,7 @@ export default function Chat() {
           <div className="text-center">
             <Users className="w-16 h-16 text-red-500 mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">Chat Not Found</h3>
-            <p className="text-[#667781] mb-4">{chatError}</p>
+            <p className="text-[#dc2626] mb-4">{chatError}</p>
             <Button onClick={() => navigate('/')}>Return to Home</Button>
           </div>
         </div>
@@ -380,23 +380,23 @@ export default function Chat() {
   const otherParticipant = getOtherParticipant();
 
   return (
-    <div className="min-h-screen bg-[#e5ddd5] flex flex-col" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'100\' height=\'100\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M10 10h80v80H10z\' fill=\'%23d9d9d9\' opacity=\'0.06\'/%3E%3C/svg%3E")' }}>
+    <div className="min-h-screen bg-[#fdf2f8] flex flex-col" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'100\' height=\'100\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M10 10h80v80H10z\' fill=\'%23fecaca\' opacity=\'0.1\'/%3E%3C/svg%3E")' }}>
       {/* Header */}
-      <div className="bg-[#075e54] shadow-sm sticky top-0 z-50">
+      <div className="bg-[#dc2626] shadow-sm sticky top-0 z-50">
         <div className="max-w-screen-xl mx-auto px-4 py-2.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="text-white hover:bg-[#128c7e]">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="text-white hover:bg-[#b91c1c]">
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <Avatar className="w-10 h-10">
               <AvatarImage src="/placeholder.svg" />
-              <AvatarFallback className="bg-[#128c7e] text-white">
+              <AvatarFallback className="bg-[#b91c1c] text-white">
                 {otherParticipant?.email?.charAt(0).toUpperCase() || 'U'}
               </AvatarFallback>
             </Avatar>
             <div>
               <h2 className="font-medium text-white text-[16px]">{otherParticipant?.email || 'Unknown User'}</h2>
-              <p className="text-[13px] text-[#d9fdd3]">
+              <p className="text-[13px] text-[#fecaca]">
                 {typingUsers.size > 0 ? 'typing...' : getUserStatus(otherParticipant?._id || '') === 'online' ? 'online' : 'offline'}
               </p>
             </div>
@@ -419,9 +419,9 @@ export default function Chat() {
       <div className="flex-1 overflow-y-auto px-[8%] py-3">
         {messages.length === 0 ? (
           <div className="text-center py-12">
-            <Heart className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2 text-[#667781]">Start the conversation!</h3>
-            <p className="text-[#667781]">Send a message to begin chatting.</p>
+            <Heart className="w-16 h-16 text-red-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2 text-[#dc2626]">Start the conversation!</h3>
+            <p className="text-[#dc2626]">Send a message to begin chatting.</p>
           </div>
         ) : (
           <div className="max-w-[900px] mx-auto space-y-2">
@@ -433,14 +433,14 @@ export default function Chat() {
                 <div key={message._id}>
                   {showDate && (
                     <div style={{ textAlign: 'center', margin: '12px 0' }}>
-                      <div style={{ 
-                        display: 'inline-block', 
-                        backgroundColor: 'rgba(255,255,255,0.85)', 
-                        padding: '6px 12px', 
-                        borderRadius: '7px', 
-                        fontSize: '12.5px', 
-                        color: '#667781', 
-                        boxShadow: '0 1px 0.5px rgba(0,0,0,0.13)' 
+                      <div style={{
+                        display: 'inline-block',
+                        backgroundColor: 'rgba(255,255,255,0.9)',
+                        padding: '6px 12px',
+                        borderRadius: '7px',
+                        fontSize: '12.5px',
+                        color: '#dc2626',
+                        boxShadow: '0 1px 0.5px rgba(0,0,0,0.13)'
                       }}>
                         {formatDate(message.timestamp)}
                       </div>
@@ -449,13 +449,13 @@ export default function Chat() {
                   
                   {message.isDeleted ? (
                     <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
-                      <div style={{ 
-                        backgroundColor: 'rgba(255,255,255,0.85)', 
-                        color: '#667781', 
-                        fontStyle: 'italic', 
-                        padding: '7px 12px', 
-                        borderRadius: '7px', 
-                        fontSize: '13px', 
+                      <div style={{
+                        backgroundColor: 'rgba(255,255,255,0.9)',
+                        color: '#dc2626',
+                        fontStyle: 'italic',
+                        padding: '7px 12px',
+                        borderRadius: '7px',
+                        fontSize: '13px',
                         boxShadow: '0 1px 0.5px rgba(0,0,0,0.13)',
                         display: 'flex',
                         alignItems: 'center',
@@ -466,31 +466,31 @@ export default function Chat() {
                       </div>
                     </div>
                   ) : (
-                    <div style={{ 
-                      display: 'flex', 
+                    <div style={{
+                      display: 'flex',
                       justifyContent: isOwn ? 'flex-end' : 'flex-start',
                       marginBottom: '2px',
                       width: '100%'
                     }}>
                       <div style={{ maxWidth: '65%', position: 'relative' }}>
                         {editingMessageId === message._id ? (
-                          <div style={{ 
-                            backgroundColor: 'white', 
-                            borderRadius: '7.5px', 
-                            padding: '6px 7px 8px 9px', 
+                          <div style={{
+                            backgroundColor: 'white',
+                            borderRadius: '7.5px',
+                            padding: '6px 7px 8px 9px',
                             boxShadow: '0 1px 0.5px rgba(0,0,0,0.13)'
                           }}>
-                            <Input 
-                              value={editContent} 
-                              onChange={(e) => setEditContent(e.target.value)} 
-                              style={{ 
-                                fontSize: '14.2px', 
-                                border: 'none', 
-                                padding: 0, 
-                                height: 'auto', 
-                                backgroundColor: 'transparent' 
-                              }} 
-                              placeholder="Edit your message..." 
+                            <Input
+                              value={editContent}
+                              onChange={(e) => setEditContent(e.target.value)}
+                              style={{
+                                fontSize: '14.2px',
+                                border: 'none',
+                                padding: 0,
+                                height: 'auto',
+                                backgroundColor: 'transparent'
+                              }}
+                              placeholder="Edit your message..."
                             />
                             <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
                               <Button size="sm" onClick={handleSaveEdit}>Save</Button>
@@ -503,7 +503,7 @@ export default function Chat() {
                             padding: '6px 7px 8px 9px',
                             borderRadius: '7.5px',
                             boxShadow: '0 1px 0.5px rgba(0,0,0,0.13)',
-                            backgroundColor: isOwn ? '#d9fdd3' : 'white',
+                            backgroundColor: isOwn ? '#fecaca' : 'white',
                             borderTopLeftRadius: '7.5px',
                             borderTopRightRadius: '7.5px',
                             borderBottomRightRadius: isOwn ? '0px' : '7.5px',
@@ -515,13 +515,13 @@ export default function Chat() {
                               bottom: 0,
                               width: 0,
                               height: 0,
-                              ...(isOwn 
-                                ? { 
+                              ...(isOwn
+                                ? {
                                     right: '-8px',
-                                    borderLeft: '8px solid #d9fdd3',
+                                    borderLeft: '8px solid #fecaca',
                                     borderBottom: '13px solid transparent'
                                   }
-                                : { 
+                                : {
                                     left: '-8px',
                                     borderRight: '8px solid white',
                                     borderBottom: '13px solid transparent'
@@ -529,42 +529,42 @@ export default function Chat() {
                               )
                             }} />
                             
-                            <p style={{ 
-                              fontSize: '14.2px', 
-                              lineHeight: '19px', 
-                              whiteSpace: 'pre-wrap', 
-                              wordBreak: 'break-word', 
+                            <p style={{
+                              fontSize: '14.2px',
+                              lineHeight: '19px',
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-word',
                               marginBottom: '2px',
                               color: '#111827'
                             }}>
                               {message.content}
                             </p>
                             
-                            <div style={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: 'flex-end', 
-                              gap: '3px', 
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'flex-end',
+                              gap: '3px',
                               marginTop: '2px',
                               float: 'right',
                               marginLeft: '10px'
                             }}>
                               {message.isEdited && (
-                                <span style={{ fontSize: '11px', color: '#667781', marginRight: '3px' }}>
+                                <span style={{ fontSize: '11px', color: '#dc2626', marginRight: '3px' }}>
                                   edited
                                 </span>
                               )}
-                              <span style={{ fontSize: '11px', color: '#667781' }}>
+                              <span style={{ fontSize: '11px', color: '#dc2626' }}>
                                 {formatTime(message.timestamp)}
                               </span>
                               {isOwn && (
-                                <span style={{ 
-                                  fontSize: '16px', 
+                                <span style={{
+                                  fontSize: '16px',
                                   lineHeight: 1,
                                   marginLeft: '2px',
-                                  color: message.deliveryStatus === 'read' ? '#53bdeb' : '#8696a0'
+                                  color: message.deliveryStatus === 'read' ? '#ef4444' : '#dc2626'
                                 }}>
-                                  {!message.deliveryStatus || message.deliveryStatus === 'sent' ? '✓' : '✓✓'}
+                                  {!message.deliveryStatus || message.deliveryStatus === 'sent' ? '♥' : '♥♥'}
                                 </span>
                               )}
                             </div>
@@ -583,7 +583,7 @@ export default function Chat() {
       </div>
 
       {/* Input */}
-      <div className="bg-[#f0f0f0] px-[8%] py-2.5 border-t border-[#d1d7db]">
+      <div className="bg-[#fef2f2] px-[8%] py-2.5 border-t border-[#fecaca]">
         <div className="flex gap-2.5 max-w-[900px] mx-auto items-end">
           <Input value={newMessage} onChange={handleTyping}
             onKeyPress={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); }}}
@@ -591,7 +591,7 @@ export default function Chat() {
             className="flex-1 rounded-[21px] border-none bg-white px-3 py-2 text-[14.2px] min-h-[42px]" />
           <button onClick={handleSendMessage} disabled={!newMessage.trim() || isSending}
             className={`w-[42px] h-[42px] rounded-full flex items-center justify-center flex-shrink-0 ${
-              newMessage.trim() ? 'bg-[#25d366] hover:bg-[#20bd5f]' : 'bg-[#b3b3b3]'} text-white`}>
+              newMessage.trim() ? 'bg-[#dc2626] hover:bg-[#b91c1c]' : 'bg-[#fca5a5]'} text-white`}>
             {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </button>
         </div>
