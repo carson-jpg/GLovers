@@ -35,19 +35,22 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
-// Body parser middleware with increased limit for chat data
-app.use(express.json({
-  limit: '10mb',
-  strict: false, // Allow non-standard JSON
-  type: (req) => {
-    // Only parse as JSON if it's not multipart
-    const contentType = req.headers['content-type'] || '';
-    if (contentType.includes('multipart/form-data')) {
-      return false;
-    }
-    return 'application/json';
+// Body parser middleware - only for JSON requests
+app.use((req, res, next) => {
+  const contentType = req.headers['content-type'] || '';
+  
+  // Skip body parsing for multipart form data
+  if (contentType.includes('multipart/form-data')) {
+    return next();
   }
-}));
+  
+  // Parse JSON for other content types
+  if (contentType.includes('application/json')) {
+    return express.json({ limit: '10mb' })(req, res, next);
+  }
+  
+  next();
+});
 
 // Cookie parser middleware
 app.use(cookieParser());
