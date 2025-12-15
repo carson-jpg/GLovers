@@ -146,9 +146,10 @@ export default function Chat() {
       const response = await apiClient.getChat(chatId!);
       if (response.success) {
         setChat(response.data);
-        setMessages(response.data.messages || []);
+        const loadedMessages = response.data.messages || [];
+        setMessages(loadedMessages);
         socketService.markMessagesAsRead(chatId!);
-        acknowledgeUnreadMessages(response.data.messages || []);
+        acknowledgeUnreadMessages(loadedMessages);
       }
     } catch (error: any) {
       setChatError(error.message || 'Chat not found');
@@ -427,8 +428,6 @@ export default function Chat() {
             {messages.map((message, index) => {
               const isOwn = isOwnMessage(message);
               const showDate = index === 0 || formatDate(message.timestamp) !== formatDate(messages[index - 1].timestamp);
-              
-              console.log('Message:', message.content, 'isOwn:', isOwn, 'senderId:', message.senderId, 'userId:', user?.id);
               
               return (
                 <div key={message._id}>

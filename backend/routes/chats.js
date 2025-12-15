@@ -19,9 +19,21 @@ router.get('/', protect, async (req, res) => {
       .populate('messages.senderId', 'email')
       .sort({ lastMessageAt: -1 });
 
+    // Transform chats to match socket message format
+    const transformedChats = chats.map(chat => ({
+      ...chat.toObject(),
+      messages: chat.messages.map(message => ({
+        ...message.toObject(),
+        sender: message.senderId ? {
+          _id: message.senderId._id,
+          email: message.senderId.email
+        } : null
+      }))
+    }));
+
     res.status(200).json({
       success: true,
-      data: chats
+      data: transformedChats
     });
   } catch (error) {
     console.error(error);
@@ -136,9 +148,21 @@ router.get('/:chatId', protect, async (req, res) => {
       });
     }
 
+    // Transform messages to match socket message format
+    const transformedChat = {
+      ...chat.toObject(),
+      messages: chat.messages.map(message => ({
+        ...message.toObject(),
+        sender: message.senderId ? {
+          _id: message.senderId._id,
+          email: message.senderId.email
+        } : null
+      }))
+    };
+
     res.status(200).json({
       success: true,
-      data: chat
+      data: transformedChat
     });
   } catch (error) {
     console.error(error);
@@ -360,12 +384,22 @@ router.get('/:chatId/messages', protect, async (req, res) => {
     // Get messages with pagination
     const messages = chat.messages
       .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(skip, skip + parseInt(limit));
+      .slice(skip, skip + parseInt(limit))
+      .reverse();
+
+    // Transform messages to match socket message format
+    const transformedMessages = messages.map(message => ({
+      ...message.toObject(),
+      sender: message.senderId ? {
+        _id: message.senderId._id,
+        email: message.senderId.email
+      } : null
+    }));
 
     res.status(200).json({
       success: true,
       data: {
-        messages: messages.reverse(),
+        messages: transformedMessages,
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
