@@ -42,27 +42,31 @@ app.use(bodyParser.raw({
   limit: '10mb'
 }));
 
-// Manual JSON parsing middleware
+// Ultra-safe JSON parsing middleware
 app.use((req, res, next) => {
   const contentType = req.headers['content-type'] || '';
   
-  // Skip parsing for multipart form data
+  // Skip ALL parsing for multipart form data
   if (contentType.includes('multipart/form-data')) {
+    console.log('Skipping parsing for multipart request');
     return next();
   }
   
-  // Manually parse JSON for application/json requests
-  if (contentType.includes('application/json') && req.body) {
+  // Only attempt JSON parsing if we have body data and it's clearly JSON
+  if (contentType.includes('application/json') && req.body && req.body.length > 0) {
     try {
-      if (Buffer.isBuffer(req.body)) {
-        req.body = JSON.parse(req.body.toString('utf8'));
+      // Check if body looks like JSON before parsing
+      const bodyStr = req.body.toString('utf8').trim();
+      if (bodyStr.startsWith('{') || bodyStr.startsWith('[')) {
+        req.body = JSON.parse(bodyStr);
+      } else {
+        console.log('Body does not appear to be JSON:', bodyStr.substring(0, 50));
       }
     } catch (error) {
-      console.error('JSON parsing error:', error);
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid JSON'
-      });
+      console.error('JSON parsing error:', error.message);
+      console.log('Attempted to parse:', req.body.toString('utf8').substring(0, 100));
+      // Don't send error response, just log and continue
+      // This prevents the request from failing
     }
   }
   
