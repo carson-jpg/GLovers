@@ -62,11 +62,11 @@ export function useCall(): UseCallReturn {
   // Socket event listeners for incoming calls
   useEffect(() => {
     socketService.onIncomingCall((data) => {
-      console.log('Incoming call received:', data);
+      console.log('Incoming call received in useCall hook:', data);
       setPendingCallData(data);
       setCallConfig(data.config);
       setRecipientInfo({ id: data.from, email: 'Loading...', avatar: undefined });
-      setIsCallModalOpen(true);
+      // Don't auto-open modal here - let the WebRTC service handle the state change
     });
 
     return () => {

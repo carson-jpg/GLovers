@@ -421,11 +421,22 @@ class SocketService {
       socket.on('call_answer', async (data) => {
         const { callId, answer } = data;
         try {
-          // Find the original caller (you might want to store call initiator in a database)
-          // For now, we'll send back to all connected users except the answerer
-          socket.broadcast.emit('call_answered', { callId, answer });
+          console.log('📞 Backend: Call answered for callId:', callId, 'by user:', socket.userId);
+          
+          // For direct calls, we need to send the answer back to the caller
+          // Since we don't have a call initiator database, we'll use a different approach
+          // Store the answer temporarily and notify all users in the call
+          
+          // Broadcast the answer to all other users in the call
+          socket.broadcast.emit('call_answered', {
+            callId,
+            answer,
+            from: socket.userId // Include who answered the call
+          });
+          
+          console.log('✅ Backend: Call answer broadcasted for callId:', callId);
         } catch (error) {
-          console.error('Error sending call answer:', error);
+          console.error('❌ Backend: Error sending call answer:', error);
           socket.emit('call_failed', { callId, reason: 'Failed to send call answer' });
         }
       });
@@ -433,30 +444,44 @@ class SocketService {
       socket.on('ice_candidate', async (data) => {
         const { callId, candidate } = data;
         try {
+          console.log('🧊 Backend: ICE candidate for callId:', callId, 'from user:', socket.userId);
           // Broadcast ICE candidate to all other users in the call
-          socket.broadcast.emit('ice_candidate', { callId, candidate });
+          socket.broadcast.emit('ice_candidate', {
+            callId,
+            candidate,
+            from: socket.userId
+          });
         } catch (error) {
-          console.error('Error sending ICE candidate:', error);
+          console.error('❌ Backend: Error sending ICE candidate:', error);
         }
       });
 
       socket.on('end_call', async (data) => {
         const { callId } = data;
         try {
+          console.log('📞 Backend: Call ended for callId:', callId, 'by user:', socket.userId);
           // Notify all users that the call has ended
-          socket.broadcast.emit('call_ended', { callId });
+          socket.broadcast.emit('call_ended', {
+            callId,
+            from: socket.userId
+          });
         } catch (error) {
-          console.error('Error ending call:', error);
+          console.error('❌ Backend: Error ending call:', error);
         }
       });
 
       socket.on('reject_call', async (data) => {
         const { callId, reason } = data;
         try {
+          console.log('📞 Backend: Call rejected for callId:', callId, 'by user:', socket.userId, 'reason:', reason);
           // Notify all users that the call was rejected
-          socket.broadcast.emit('call_rejected', { callId, reason });
+          socket.broadcast.emit('call_rejected', {
+            callId,
+            reason,
+            from: socket.userId
+          });
         } catch (error) {
-          console.error('Error rejecting call:', error);
+          console.error('❌ Backend: Error rejecting call:', error);
         }
       });
     });

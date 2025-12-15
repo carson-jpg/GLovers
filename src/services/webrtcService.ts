@@ -112,19 +112,15 @@ class WebRTCService {
       this.currentCallId = callData.callId;
       this.isInitiator = false;
 
-      // Ask user to accept/decline call
-      this.updateCallState('incoming');
-      this.eventCallbacks.onCallStateChange?.('incoming');
+      // Store the call data for later use
+      this.pendingCallData = callData;
 
-      // Create peer connection for answering
+      // Create peer connection for answering first
       this.createPeerConnection(callData.from, callData.callId, callData.config);
 
-      // Set remote description (offer) - will be handled by handleCallOffer
-      this.handleCallOffer({
-        callId: callData.callId,
-        offer: callData.offer,
-        from: callData.from
-      });
+      // Now set the call state to incoming and notify UI
+      this.updateCallState('incoming');
+      this.eventCallbacks.onCallStateChange?.('incoming');
 
     } catch (error) {
       console.error('Failed to handle incoming call:', error);
@@ -133,9 +129,20 @@ class WebRTCService {
     }
   };
 
+  private pendingCallData: any = null;
+
   async acceptCall(callId: string): Promise<void> {
+    console.log('Accepting call:', callId);
+    
+    // Check if we have a pending call or active peer connection
     if (!this.peerConnection || this.peerConnection.callId !== callId) {
-      throw new Error('No incoming call to accept');
+      // If we have pending call data, use it to create the peer connection
+      if (this.pendingCallData && this.pendingCallData.callId === callId) {
+        this.createPeerConnection(this.pendingCallData.from, callId, this.pendingCallData.config);
+        this.updateCallState('incoming'); // Make sure we're in incoming state
+      } else {
+        throw new Error('No incoming call to accept');
+      }
     }
 
     try {
@@ -146,6 +153,11 @@ class WebRTCService {
           audio: this.peerConnection.config.audio
         };
         this.localStream = await this.initializeMedia(constraints);
+        
+        // Add tracks to peer connection
+        this.localStream.getTracks().forEach(track => {
+          this.peerConnection!.pc.addTrack(track, this.localStream!);
+        });
       }
 
       // Create answer
@@ -155,7 +167,11 @@ class WebRTCService {
       // Send answer through socket
       socketService.sendCallAnswer(callId, answer);
 
+      // Clear pending call data
+      this.pendingCallData = null;
+      
       this.updateCallState('connecting');
+      console.log('Call accepted, transitioning to connecting state');
 
     } catch (error) {
       console.error('Failed to accept call:', error);
@@ -165,7 +181,16 @@ class WebRTCService {
   }
 
   async rejectCall(callId: string, reason?: string): Promise<void> {
-    socketService.rejectCall(callId, reason || 'Rejected');
+    console.log('Rejecting call:', callId);
+    
+    // If this is our pending call, reject it via socket
+    if (this.pendingCallData && this.pendingCallData.callId === callId) {
+      socketService.rejectCall(callId, reason || 'Rejected');
+      this.pendingCallData = null;
+    } else if (this.peerConnection && this.peerConnection.callId === callId) {
+      socketService.rejectCall(callId, reason || 'Rejected');
+    }
+    
     this.cleanup();
   }
 
@@ -291,13 +316,31 @@ class WebRTCService {
   };
 
   handleCallOffer = (data: any): void => {
-    if (!this.peerConnection || this.peerConnection.callId !== data.callId) return;
-
-    try {
-      this.peerConnection.pc.setRemoteDescription(data.offer);
-    } catch (error) {
-      console.error('Failed to handle call offer:', error);
-      this.cleanup();
+    console.log('Handling call offer for callId:', data.callId);
+    
+    // If this is for our current incoming call, set the remote description
+    if (this.peerConnection && this.peerConnection.callId === data.callId) {
+      try {
+        this.peerConnection.pc.setRemoteDescription(data.offer);
+        console.log('Remote description set successfully');
+      } catch (error) {
+        console.error('Failed to handle call offer:', error);
+        this.cleanup();
+      }
+    } else if (this.pendingCallData && this.pendingCallData.callId === data.callId) {
+      // This might be the initial offer for our pending call
+      // Create peer connection if not already created
+      if (!this.peerConnection) {
+        this.createPeerConnection(this.pendingCallData.from, data.callId, this.pendingCallData.config);
+      }
+      
+      try {
+        this.peerConnection!.pc.setRemoteDescription(data.offer);
+        console.log('Remote description set for pending call');
+      } catch (error) {
+        console.error('Failed to handle call offer for pending call:', error);
+        this.cleanup();
+      }
     }
   };
 
@@ -342,6 +385,8 @@ class WebRTCService {
   }
 
   private cleanup(): void {
+    console.log('Cleaning up WebRTC service');
+    
     // Stop all tracks
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => track.stop());
@@ -361,6 +406,7 @@ class WebRTCService {
 
     this.currentCallId = null;
     this.isInitiator = false;
+    this.pendingCallData = null;
   }
 
   // Getters for current state
