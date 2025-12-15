@@ -8,6 +8,20 @@ import { uploadImage } from '../services/cloudinaryService.js';
 
 const router = express.Router();
 
+// CORS middleware for timeline routes
+router.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || process.env.FRONTEND_URL || 'https://g-lovers.vercel.app');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
+
 // Configure multer for memory storage
 const upload = multer({
   storage: multer.memoryStorage(),
