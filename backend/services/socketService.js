@@ -116,21 +116,15 @@ class SocketService {
             return;
           }
 
-          const chat = await Chat.findById(chatId);
+          // Check if user is participant first
+          const chat = await Chat.findOne({
+            _id: chatId,
+            participants: socket.userId
+          });
+
           if (!chat) {
-            console.log('❌ Backend: Chat not found:', chatId);
-            socket.emit('error', { message: 'Chat not found' });
-            return;
-          }
-
-          // Check if user is participant
-          const isParticipant = chat.participants.some(
-            p => p.toString() === socket.userId
-          );
-
-          if (!isParticipant) {
-            console.log('❌ Backend: Access denied for user:', socket.userId);
-            socket.emit('error', { message: 'Access denied' });
+            console.log('❌ Backend: Chat not found or access denied:', chatId);
+            socket.emit('error', { message: 'Chat not found or access denied' });
             return;
           }
 
@@ -139,33 +133,52 @@ class SocketService {
             senderId: socket.userId,
             content: content.trim(),
             type,
-            timestamp: new Date()
+            timestamp: new Date(),
+            deliveryStatus: 'sent',
+            deliveredTo: [],
+            readBy: []
           };
 
-          // Add message to chat
-          chat.messages.push(message);
-          chat.lastMessage = message.content;
-          chat.lastMessageAt = message.timestamp;
-          await chat.save();
-
-          // Broadcast message to all participants
-          const messageData = {
-            ...message,
-            _id: chat.messages[chat.messages.length - 1]._id,
-            sender: {
-              _id: socket.user._id,
-              email: socket.user.email
+          // Add message using atomic operation and get the new message ID
+          const result = await Chat.findOneAndUpdate(
+            {
+              _id: chatId,
+              participants: socket.userId
+            },
+            {
+              $push: {
+                messages: message
+              },
+              $set: {
+                lastMessage: message.content,
+                lastMessageAt: message.timestamp
+              }
+            },
+            {
+              new: true,
+              projection: { messages: { $slice: -1 } } // Only return the last message
             }
-          };
+          );
 
-          console.log('📨 Backend: Broadcasting new_message to chat:', chatId, messageData);
-          this.io.to(`chat_${chatId}`).emit('new_message', {
-            chatId,
-            message: messageData
-          });
+          if (result && result.messages.length > 0) {
+            const messageData = {
+              ...message,
+              _id: result.messages[0]._id,
+              sender: {
+                _id: socket.user._id,
+                email: socket.user.email
+              }
+            };
 
-          // Send push notification to offline users
-          this.sendPushNotification(chatId, messageData);
+            console.log('📨 Backend: Broadcasting new_message to chat:', chatId, messageData);
+            this.io.to(`chat_${chatId}`).emit('new_message', {
+              chatId,
+              message: messageData
+            });
+
+            // Send push notification to offline users
+            this.sendPushNotification(chatId, messageData);
+          }
 
         } catch (error) {
           console.error('❌ Backend: Error sending message:', error);
@@ -194,36 +207,35 @@ class SocketService {
       socket.on('mark_messages_read', async (data) => {
         try {
           const { chatId } = data;
-          const chat = await Chat.findById(chatId);
           
-          if (!chat) {
-            socket.emit('error', { message: 'Chat not found' });
-            return;
+          // Use atomic operations to mark all unread messages as read
+          const result = await Chat.updateMany(
+            {
+              _id: chatId,
+              'messages.senderId': { $ne: socket.userId },
+              'messages.readBy.userId': { $ne: socket.userId },
+              'messages.isDeleted': { $ne: true }
+            },
+            {
+              $addToSet: {
+                'messages.$.readBy': {
+                  userId: socket.userId,
+                  readAt: new Date()
+                }
+              }
+            }
+          );
+
+          if (result.modifiedCount > 0) {
+            // Notify other participants
+            socket.to(`chat_${chatId}`).emit('messages_read', {
+              chatId,
+              userId: socket.userId
+            });
           }
 
-          // Mark messages as read by current user
-          chat.messages.forEach(message => {
-            const alreadyRead = message.readBy.some(
-              read => read.userId.toString() === socket.userId
-            );
-            
-            if (!alreadyRead && message.senderId.toString() !== socket.userId) {
-              message.readBy.push({
-                userId: socket.userId,
-                readAt: new Date()
-              });
-            }
-          });
-
-          await chat.save();
-
-          // Notify other participants
-          socket.to(`chat_${chatId}`).emit('messages_read', {
-            chatId,
-            userId: socket.userId
-          });
-
         } catch (error) {
+          console.error('Error marking messages as read:', error);
           socket.emit('error', { message: 'Failed to mark messages as read' });
         }
       });
@@ -232,30 +244,38 @@ class SocketService {
       socket.on('edit_message', async (data) => {
         try {
           const { chatId, messageId, newContent } = data;
-          const chat = await Chat.findById(chatId);
           
-          if (!chat) {
-            socket.emit('error', { message: 'Chat not found' });
+          if (!newContent || newContent.trim() === '') {
+            socket.emit('error', { message: 'Message content is required' });
             return;
           }
 
-          const message = chat.messages.id(messageId);
-          if (!message || message.senderId.toString() !== socket.userId) {
+          const result = await Chat.updateOne(
+            {
+              _id: chatId,
+              'messages._id': messageId,
+              'messages.senderId': socket.userId,
+              'messages.isDeleted': { $ne: true }
+            },
+            {
+              $set: {
+                'messages.$.content': newContent.trim(),
+                'messages.$.isEdited': true,
+                'messages.$.editedAt': new Date()
+              }
+            }
+          );
+
+          if (result.matchedCount > 0) {
+            this.io.to(`chat_${chatId}`).emit('message_edited', {
+              chatId,
+              messageId,
+              newContent: newContent.trim(),
+              editedAt: new Date()
+            });
+          } else {
             socket.emit('error', { message: 'Message not found or unauthorized' });
-            return;
           }
-
-          message.content = newContent.trim();
-          message.isEdited = true;
-          message.editedAt = new Date();
-          await chat.save();
-
-          this.io.to(`chat_${chatId}`).emit('message_edited', {
-            chatId,
-            messageId,
-            newContent: message.content,
-            editedAt: message.editedAt
-          });
         } catch (error) {
           console.error('Error editing message:', error);
           socket.emit('error', { message: 'Failed to edit message' });
@@ -266,27 +286,30 @@ class SocketService {
       socket.on('delete_message', async (data) => {
         try {
           const { chatId, messageId } = data;
-          const chat = await Chat.findById(chatId);
           
-          if (!chat) {
-            socket.emit('error', { message: 'Chat not found' });
-            return;
-          }
+          const result = await Chat.updateOne(
+            {
+              _id: chatId,
+              'messages._id': messageId,
+              'messages.senderId': socket.userId,
+              'messages.isDeleted': { $ne: true }
+            },
+            {
+              $set: {
+                'messages.$.isDeleted': true,
+                'messages.$.deletedAt': new Date()
+              }
+            }
+          );
 
-          const message = chat.messages.id(messageId);
-          if (!message || message.senderId.toString() !== socket.userId) {
+          if (result.matchedCount > 0) {
+            this.io.to(`chat_${chatId}`).emit('message_deleted', {
+              chatId,
+              messageId
+            });
+          } else {
             socket.emit('error', { message: 'Message not found or unauthorized' });
-            return;
           }
-
-          message.isDeleted = true;
-          message.deletedAt = new Date();
-          await chat.save();
-
-          this.io.to(`chat_${chatId}`).emit('message_deleted', {
-            chatId,
-            messageId
-          });
         } catch (error) {
           console.error('Error deleting message:', error);
           socket.emit('error', { message: 'Failed to delete message' });
@@ -313,33 +336,43 @@ class SocketService {
       socket.on('message_delivered', async (data) => {
         try {
           const { chatId, messageId } = data;
-          const chat = await Chat.findById(chatId);
           
-          if (chat) {
-            const message = chat.messages.id(messageId);
-            if (message) {
-              const alreadyDelivered = message.deliveredTo?.some(
-                delivered => delivered.userId.toString() === socket.userId
-              );
-              
-              if (!alreadyDelivered) {
-                if (!message.deliveredTo) {
-                  message.deliveredTo = [];
-                }
-                message.deliveryStatus = 'delivered';
-                message.deliveredTo.push({
+          // Use atomic operations to avoid version conflicts
+          const result = await Chat.updateOne(
+            {
+              _id: chatId,
+              'messages._id': messageId,
+              'messages.deliveredTo.userId': { $ne: socket.userId }
+            },
+            {
+              $set: {
+                'messages.$.deliveryStatus': 'delivered'
+              },
+              $addToSet: {
+                'messages.$.deliveredTo': {
                   userId: socket.userId,
                   deliveredAt: new Date()
-                });
-                await chat.save();
-
-                // Notify sender
-                this.sendToUser(message.senderId.toString(), 'message_delivered', {
-                  chatId,
-                  messageId,
-                  deliveredTo: socket.userId
-                });
+                }
               }
+            }
+          );
+
+          if (result.matchedCount > 0) {
+            // Get the message to find sender for notification
+            const chat = await Chat.findOne(
+              { _id: chatId, 'messages._id': messageId },
+              { 'messages.$': 1 }
+            );
+            
+            if (chat && chat.messages.length > 0) {
+              const message = chat.messages[0];
+              
+              // Notify sender
+              this.sendToUser(message.senderId.toString(), 'message_delivered', {
+                chatId,
+                messageId,
+                deliveredTo: socket.userId
+              });
             }
           }
         } catch (error) {
@@ -357,14 +390,20 @@ class SocketService {
       socket.on('chat_participant_left', async (data) => {
         try {
           const { chatId } = data;
-          const chat = await Chat.findById(chatId);
           
-          if (chat) {
-            chat.participants = chat.participants.filter(
-              p => p.toString() !== socket.userId
-            );
-            await chat.save();
+          const result = await Chat.updateOne(
+            {
+              _id: chatId,
+              participants: socket.userId
+            },
+            {
+              $pull: {
+                participants: socket.userId
+              }
+            }
+          );
 
+          if (result.matchedCount > 0) {
             socket.leave(`chat_${chatId}`);
             socket.to(`chat_${chatId}`).emit('participant_left', {
               chatId,
