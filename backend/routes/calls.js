@@ -1,78 +1,64 @@
 import express from 'express';
 import { protect } from '../middleware/auth.js';
+import CallLog from '../models/CallLog.js';
+import Chat from '../models/Chat.js';
+import User from '../models/User.js';
 
 const router = express.Router();
-
-// Mock call logs data - in a real app, this would be stored in a database
-const mockCallLogs = [
-  {
-    id: '1',
-    chatId: 'chat1',
-    participantId: 'user1',
-    participantEmail: 'john@example.com',
-    type: 'voice',
-    direction: 'incoming',
-    status: 'completed',
-    timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 minutes ago
-    duration: 180 // 3 minutes
-  },
-  {
-    id: '2',
-    chatId: 'chat2',
-    participantId: 'user2',
-    participantEmail: 'jane@example.com',
-    type: 'video',
-    direction: 'outgoing',
-    status: 'completed',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
-    duration: 420 // 7 minutes
-  },
-  {
-    id: '3',
-    chatId: 'chat1',
-    participantId: 'user1',
-    participantEmail: 'john@example.com',
-    type: 'voice',
-    direction: 'missed',
-    status: 'missed',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString() // 1 day ago
-  },
-  {
-    id: '4',
-    chatId: 'chat3',
-    participantId: 'user3',
-    participantEmail: 'alice@example.com',
-    type: 'video',
-    direction: 'incoming',
-    status: 'rejected',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString() // 6 hours ago
-  }
-];
 
 // @route   GET /api/calls
 // @desc    Get user's call logs
 // @access  Private
 router.get('/', protect, async (req, res) => {
   try {
-    // In a real implementation, you would:
-    // 1. Query the database for call logs related to the current user
-    // 2. Join with user data to get participant information
-    // 3. Sort by timestamp descending
+    const userId = req.user.id;
     
-    // For now, return mock data
-    const sortedCallLogs = mockCallLogs.sort((a, b) => 
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
+    // Get call logs for the current user
+    const callLogs = await CallLog.find({
+      $or: [
+        { callerId: userId },
+        { recipientId: userId }
+      ]
+    })
+    .populate('callerId', 'email')
+    .populate('recipientId', 'email')
+    .populate('chatId', 'participants')
+    .sort({ createdAt: -1 })
+    .limit(100); // Limit to recent 100 calls
+
+    // Transform the data to match the expected frontend format
+    const transformedLogs = callLogs.map(callLog => {
+      const otherUser = callLog.callerId.toString() === userId 
+        ? callLog.recipientId 
+        : callLog.callerId;
+      
+      // Find the chat between these users
+      const chat = callLog.chatId;
+      
+      return {
+        id: callLog._id.toString(),
+        chatId: callLog.chatId._id.toString(),
+        participantId: otherUser._id.toString(),
+        participantEmail: otherUser.email,
+        type: callLog.callType,
+        direction: callLog.direction,
+        status: callLog.status,
+        timestamp: callLog.createdAt.toISOString(),
+        duration: callLog.duration || undefined,
+        callId: callLog.callId || undefined,
+        reason: callLog.reason || undefined
+      };
+    });
 
     res.status(200).json({
       success: true,
-      data: sortedCallLogs
+      data: transformedLogs
     });
   } catch (error) {
-    console.error(error);
+    console.error('Error fetching call logs:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: 'Failed to fetch call logs'
     });
   }
 });
@@ -82,45 +68,99 @@ router.get('/', protect, async (req, res) => {
 // @access  Private
 router.post('/', protect, async (req, res) => {
   try {
-    const { chatId, participantId, type, direction, status, duration } = req.body;
+    const { chatId, participantId, callType, direction, status, duration, callId, reason } = req.body;
+    const userId = req.user.id;
 
     // Validate required fields
-    if (!chatId || !participantId || !type || !direction || !status) {
+    if (!chatId || !participantId || !callType || !direction || !status) {
       return res.status(400).json({
         success: false,
         message: 'Missing required fields'
       });
     }
 
-    // In a real implementation, you would:
-    // 1. Create a new call log entry in the database
-    // 2. Return the created log entry
+    // Verify that the chat exists and user is a participant
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chat not found'
+      });
+    }
 
-    // For now, simulate creating a new log entry
-    const newCallLog = {
-      id: Date.now().toString(),
+    // Verify user is a participant in the chat
+    if (!chat.participants.some(p => p.toString() === userId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to log calls for this chat'
+      });
+    }
+
+    // Verify the participant is also in the chat
+    if (!chat.participants.some(p => p.toString() === participantId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Participant not found in chat'
+      });
+    }
+
+    // Determine caller and recipient based on direction
+    const callerId = direction === 'outgoing' ? userId : participantId;
+    const recipientId = direction === 'outgoing' ? participantId : userId;
+
+    // Create new call log
+    const newCallLog = new CallLog({
       chatId,
-      participantId,
-      participantEmail: `user${participantId.slice(-4)}@example.com`, // Mock email
-      type,
+      callerId,
+      recipientId,
+      callType,
       direction,
       status,
-      timestamp: new Date().toISOString(),
-      ...(duration && { duration })
-    };
+      callId,
+      reason,
+      startTime: new Date(),
+      endTime: status === 'completed' ? new Date() : undefined,
+      duration: duration || 0
+    });
 
-    // In real implementation, you would save this to the database
-    console.log('New call log created:', newCallLog);
+    // Calculate duration if call was completed
+    if (status === 'completed' && duration) {
+      newCallLog.duration = duration;
+    }
+
+    await newCallLog.save();
+
+    // Populate the saved call log for response
+    await newCallLog.populate(['callerId', 'recipientId', 'chatId']);
+
+    // Transform for response
+    const otherUser = newCallLog.callerId.toString() === userId 
+      ? newCallLog.recipientId 
+      : newCallLog.callerId;
+
+    const responseData = {
+      id: newCallLog._id.toString(),
+      chatId: newCallLog.chatId._id.toString(),
+      participantId: otherUser._id.toString(),
+      participantEmail: otherUser.email,
+      type: newCallLog.callType,
+      direction: newCallLog.direction,
+      status: newCallLog.status,
+      timestamp: newCallLog.createdAt.toISOString(),
+      duration: newCallLog.duration || undefined,
+      callId: newCallLog.callId || undefined,
+      reason: newCallLog.reason || undefined
+    };
 
     res.status(201).json({
       success: true,
-      data: newCallLog
+      data: responseData
     });
   } catch (error) {
-    console.error(error);
+    console.error('Error creating call log:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: 'Failed to create call log'
     });
   }
 });
@@ -131,20 +171,179 @@ router.post('/', protect, async (req, res) => {
 router.get('/:chatId', protect, async (req, res) => {
   try {
     const { chatId } = req.params;
+    const userId = req.user.id;
 
-    // In a real implementation, you would query the database
-    const chatCallLogs = mockCallLogs.filter(callLog => callLog.chatId === chatId)
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    // Verify the chat exists and user is a participant
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chat not found'
+      });
+    }
+
+    // Verify user is a participant in the chat
+    if (!chat.participants.some(p => p.toString() === userId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to view calls for this chat'
+      });
+    }
+
+    // Get call logs for this chat
+    const callLogs = await CallLog.find({ chatId })
+      .populate('callerId', 'email')
+      .populate('recipientId', 'email')
+      .sort({ createdAt: -1 });
+
+    // Transform the data
+    const transformedLogs = callLogs.map(callLog => {
+      const otherUser = callLog.callerId.toString() === userId 
+        ? callLog.recipientId 
+        : callLog.callerId;
+      
+      return {
+        id: callLog._id.toString(),
+        chatId: callLog.chatId.toString(),
+        participantId: otherUser._id.toString(),
+        participantEmail: otherUser.email,
+        type: callLog.callType,
+        direction: callLog.direction,
+        status: callLog.status,
+        timestamp: callLog.createdAt.toISOString(),
+        duration: callLog.duration || undefined,
+        callId: callLog.callId || undefined,
+        reason: callLog.reason || undefined
+      };
+    });
 
     res.status(200).json({
       success: true,
-      data: chatCallLogs
+      data: transformedLogs
     });
   } catch (error) {
-    console.error(error);
+    console.error('Error fetching chat call logs:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: 'Failed to fetch call logs'
+    });
+  }
+});
+
+// @route   PUT /api/calls/:id
+// @desc    Update a call log (e.g., mark as completed with duration)
+// @access  Private
+router.put('/:id', protect, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, duration, endTime, reason } = req.body;
+    const userId = req.user.id;
+
+    // Find the call log
+    const callLog = await CallLog.findById(id);
+    if (!callLog) {
+      return res.status(404).json({
+        success: false,
+        message: 'Call log not found'
+      });
+    }
+
+    // Verify user is involved in this call
+    if (callLog.callerId.toString() !== userId && callLog.recipientId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to update this call log'
+      });
+    }
+
+    // Update fields
+    if (status) callLog.status = status;
+    if (reason) callLog.reason = reason;
+    
+    if (endTime) {
+      callLog.endTime = new Date(endTime);
+    } else if (status === 'completed') {
+      callLog.endTime = new Date();
+    }
+
+    if (duration !== undefined) {
+      callLog.duration = duration;
+    } else if (callLog.endTime && callLog.startTime) {
+      callLog.calculateDuration();
+    }
+
+    await callLog.save();
+    await callLog.populate(['callerId', 'recipientId', 'chatId']);
+
+    // Transform for response
+    const otherUser = callLog.callerId.toString() === userId 
+      ? callLog.recipientId 
+      : callLog.callerId;
+
+    const responseData = {
+      id: callLog._id.toString(),
+      chatId: callLog.chatId._id.toString(),
+      participantId: otherUser._id.toString(),
+      participantEmail: otherUser.email,
+      type: callLog.callType,
+      direction: callLog.direction,
+      status: callLog.status,
+      timestamp: callLog.createdAt.toISOString(),
+      duration: callLog.duration || undefined,
+      callId: callLog.callId || undefined,
+      reason: callLog.reason || undefined
+    };
+
+    res.status(200).json({
+      success: true,
+      data: responseData
+    });
+  } catch (error) {
+    console.error('Error updating call log:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update call log'
+    });
+  }
+});
+
+// @route   DELETE /api/calls/:id
+// @desc    Delete a call log
+// @access  Private
+router.delete('/:id', protect, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    // Find the call log
+    const callLog = await CallLog.findById(id);
+    if (!callLog) {
+      return res.status(404).json({
+        success: false,
+        message: 'Call log not found'
+      });
+    }
+
+    // Verify user is involved in this call
+    if (callLog.callerId.toString() !== userId && callLog.recipientId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to delete this call log'
+      });
+    }
+
+    // Delete the call log
+    await CallLog.findByIdAndDelete(id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Call log deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting call log:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete call log'
     });
   }
 });
