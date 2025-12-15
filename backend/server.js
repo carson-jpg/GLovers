@@ -28,24 +28,26 @@ const server = createServer(app);
 // Initialize Socket.IO
 socketService.initialize(server);
 
-// Body parser middleware with increased limit for chat data
-app.use(express.json({
-  limit: '10mb',
-  verify: (req, res, buf) => {
-    // Skip JSON parsing for multipart requests
-    const contentType = req.headers['content-type'] || '';
-    if (contentType.includes('multipart/form-data')) {
-      req.skipJsonParsing = true;
-    }
-  }
-}));
-
 // Handle multipart form data for file uploads
 import multer from 'multer';
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
+
+// Body parser middleware with increased limit for chat data
+app.use(express.json({
+  limit: '10mb',
+  strict: false, // Allow non-standard JSON
+  type: (req) => {
+    // Only parse as JSON if it's not multipart
+    const contentType = req.headers['content-type'] || '';
+    if (contentType.includes('multipart/form-data')) {
+      return false;
+    }
+    return 'application/json';
+  }
+}));
 
 // Cookie parser middleware
 app.use(cookieParser());
