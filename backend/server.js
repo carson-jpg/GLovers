@@ -29,13 +29,6 @@ const server = createServer(app);
 // Initialize Socket.IO
 socketService.initialize(server);
 
-// Handle multipart form data for file uploads
-import multer from 'multer';
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
-});
-
 // Raw body parser for all requests
 app.use(bodyParser.raw({
   type: '*/*',

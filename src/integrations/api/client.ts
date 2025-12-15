@@ -30,10 +30,13 @@ class ApiClient {
   ): Promise<any> {
     const url = `${this.baseURL}${endpoint}`;
     
+    // Check if body is FormData - if so, don't set Content-Type header
+    const isFormData = options.body instanceof FormData;
+    
     const config: RequestInit = {
       headers: {
-        'Content-Type': 'application/json',
         ...(this.token && { Authorization: `Bearer ${this.token}` }),
+        ...(options.body && !isFormData && { 'Content-Type': 'application/json' }),
         ...options.headers,
       },
       credentials: 'include',
