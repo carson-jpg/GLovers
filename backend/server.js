@@ -36,18 +36,34 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
-// Body parser middleware - only for JSON requests
+// Raw body parser for all requests
+app.use(bodyParser.raw({
+  type: '*/*',
+  limit: '10mb'
+}));
+
+// Manual JSON parsing middleware
 app.use((req, res, next) => {
   const contentType = req.headers['content-type'] || '';
   
-  // Skip body parsing for multipart form data
+  // Skip parsing for multipart form data
   if (contentType.includes('multipart/form-data')) {
     return next();
   }
   
-  // Use body-parser for JSON requests
-  if (contentType.includes('application/json')) {
-    return bodyParser.json({ limit: '10mb' })(req, res, next);
+  // Manually parse JSON for application/json requests
+  if (contentType.includes('application/json') && req.body) {
+    try {
+      if (Buffer.isBuffer(req.body)) {
+        req.body = JSON.parse(req.body.toString('utf8'));
+      }
+    } catch (error) {
+      console.error('JSON parsing error:', error);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid JSON'
+      });
+    }
   }
   
   next();
