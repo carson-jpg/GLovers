@@ -1,0 +1,5 @@
+- [ ] Edit vite.config.ts to remove import and usage of componentTagger from "lovable-tagger"
+- [ ] Edit package.json to remove "lovable-tagger" from devDependencies
+- [ ] Edit README.md to remove all Lovable references and make it generic
+- [ ] Edit index.html to remove meta tags referencing lovable.dev
+- [ ] Run npm install to regenerate package-lock.json
