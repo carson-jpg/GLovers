@@ -16,6 +16,7 @@ import CreateProfile from "./pages/CreateProfile";
 import Subscription from "./pages/Subscription";
 import Payment from "./pages/Payment";
 import Discover from "./pages/Discover";
+import CallLogs from "./pages/CallLogs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -44,6 +45,7 @@ const App = () => (
             <Route path="/create-profile" element={<CreateProfile />} />
             <Route path="/subscription" element={<Subscription />} />
             <Route path="/payment" element={<Payment />} />
+            <Route path="/call-logs" element={<CallLogs />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

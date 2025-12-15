@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import CallQualityFeedback from './CallQualityFeedback';
 import { 
   Phone, 
   PhoneOff, 
@@ -14,10 +15,12 @@ import {
   Minimize2,
   Volume2,
   VolumeX,
-  Loader2
+  Loader2,
+  Star
 } from 'lucide-react';
 import { webrtcService, CallState, CallConfig } from '@/services/webrtcService';
 import { useAuth } from '@/hooks/useAuth';
+import { apiClient } from '@/integrations/api/client';
 
 interface CallInterfaceProps {
   isOpen: boolean;
@@ -44,11 +47,14 @@ export default function CallInterface({
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [showQualityFeedback, setShowQualityFeedback] = useState(false);
+  const [currentCallId, setCurrentCallId] = useState<string | null>(null);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const callStartTimeRef = useRef<number>(0);
-  const durationIntervalRef = useRef<NodeJS.Timeout>();
+  const durationIntervalRef = useRef<number>();
+  const callEndTimeoutRef = useRef<number>();
 
   useEffect(() => {
     if (callState === 'connected') {
@@ -91,8 +97,17 @@ export default function CallInterface({
 
   const handleCallStateChange = (state: CallState) => {
     console.log('Call state changed:', state);
+    
+    // Show quality feedback when call ends successfully
     if (state === 'ended' || state === 'failed') {
-      onClose();
+      if (callDuration > 10) { // Only show feedback for calls longer than 10 seconds
+        // Delay showing feedback to allow call interface to close
+        callEndTimeoutRef.current = window.setTimeout(() => {
+          setShowQualityFeedback(true);
+        }, 1000);
+      } else {
+        onClose();
+      }
     }
   };
 
@@ -101,19 +116,56 @@ export default function CallInterface({
   };
 
   const handleCallEnded = () => {
+    // Log the call before showing feedback
+    logCall('completed');
     onClose();
+  };
+
+  const logCall = async (status: string) => {
+    try {
+      if (!recipientInfo?.id) return;
+      
+      // Find or create chat for this call
+      const chatResponse = await apiClient.request('/chats', {
+        method: 'POST',
+        body: JSON.stringify({ participantId: recipientInfo.id })
+      });
+
+      if (chatResponse.success) {
+        const chatId = chatResponse.data._id;
+        
+        // Log the call
+        const callLogData = {
+          chatId,
+          participantId: recipientInfo.id,
+          callType: callConfig.video ? 'video' : 'voice',
+          direction: 'outgoing', // This would need to be determined based on call initiation
+          status,
+          duration: callDuration,
+          callId: currentCallId || undefined
+        };
+
+        const logResponse = await apiClient.logCall(callLogData);
+        
+        if (logResponse.success) {
+          setCurrentCallId(logResponse.data.id);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to log call:', error);
+    }
   };
 
   const startCallTimer = () => {
     callStartTimeRef.current = Date.now();
-    durationIntervalRef.current = setInterval(() => {
+    durationIntervalRef.current = window.setInterval(() => {
       setCallDuration(Math.floor((Date.now() - callStartTimeRef.current) / 1000));
     }, 1000);
   };
 
   const stopCallTimer = () => {
     if (durationIntervalRef.current) {
-      clearInterval(durationIntervalRef.current);
+      window.clearInterval(durationIntervalRef.current);
     }
     setCallDuration(0);
   };
@@ -145,6 +197,11 @@ export default function CallInterface({
   const handleToggleVideo = () => {
     const isEnabled = webrtcService.toggleVideo();
     setIsVideoOff(!isEnabled);
+  };
+
+  const handleQualityFeedbackClose = () => {
+    setShowQualityFeedback(false);
+    onClose();
   };
 
   const renderCallContent = () => {
@@ -266,6 +323,18 @@ export default function CallInterface({
           </p>
         </div>
 
+        {/* Quality indicator */}
+        <div className="absolute top-4 right-20 text-white">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setShowQualityFeedback(true)}
+            className="w-8 h-8 rounded-full bg-black/20 hover:bg-black/40"
+          >
+            <Star className="w-4 h-4" />
+          </Button>
+        </div>
+
         {/* Call controls */}
         <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-4">
           <Button
@@ -301,36 +370,48 @@ export default function CallInterface({
     );
   };
 
-  if (!isOpen) return null;
+  if (!isOpen && !showQualityFeedback) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={`${isMinimized ? 'p-2 w-auto' : 'p-0 w-[90vw] h-[90vh] max-w-none'}`}>
-        {!isMinimized && (
-          <DialogHeader className="p-4 pb-0">
-            <div className="flex items-center justify-between">
-              <DialogTitle>
-                {callConfig.video ? 'Video Call' : 'Voice Call'}
-              </DialogTitle>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => setIsMinimized(true)}
-                >
-                  <Minimize2 className="w-4 h-4" />
-                </Button>
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className={`${isMinimized ? 'p-2 w-auto' : 'p-0 w-[90vw] h-[90vh] max-w-none'}`}>
+          {!isMinimized && (
+            <DialogHeader className="p-4 pb-0">
+              <div className="flex items-center justify-between">
+                <DialogTitle>
+                  {callConfig.video ? 'Video Call' : 'Voice Call'}
+                </DialogTitle>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setIsMinimized(true)}
+                  >
+                    <Minimize2 className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
+            </DialogHeader>
+          )}
+          
+          <CardContent className={`${isMinimized ? 'p-2' : 'p-0'} h-full`}>
+            <div className={`${isMinimized ? 'w-80 h-16' : 'h-[calc(100%-4rem)]'} relative`}>
+              {renderCallContent()}
             </div>
-          </DialogHeader>
-        )}
-        
-        <CardContent className={`${isMinimized ? 'p-2' : 'p-0'} h-full`}>
-          <div className={`${isMinimized ? 'w-80 h-16' : 'h-[calc(100%-4rem)]'} relative`}>
-            {renderCallContent()}
-          </div>
-        </CardContent>
-      </DialogContent>
-    </Dialog>
+          </CardContent>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quality Feedback Dialog */}
+      {currentCallId && (
+        <CallQualityFeedback
+          isOpen={showQualityFeedback}
+          onClose={handleQualityFeedbackClose}
+          callId={currentCallId}
+          callType={callConfig.video ? 'video' : 'voice'}
+        />
+      )}
+    </>
   );
 }

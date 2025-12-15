@@ -236,7 +236,7 @@ router.get('/:chatId', protect, async (req, res) => {
 router.put('/:id', protect, async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, duration, endTime, reason } = req.body;
+    const { status, duration, endTime, reason, quality } = req.body;
     const userId = req.user.id;
 
     // Find the call log
@@ -259,6 +259,7 @@ router.put('/:id', protect, async (req, res) => {
     // Update fields
     if (status) callLog.status = status;
     if (reason) callLog.reason = reason;
+    if (quality) callLog.quality = quality;
     
     if (endTime) {
       callLog.endTime = new Date(endTime);
@@ -291,7 +292,8 @@ router.put('/:id', protect, async (req, res) => {
       timestamp: callLog.createdAt.toISOString(),
       duration: callLog.duration || undefined,
       callId: callLog.callId || undefined,
-      reason: callLog.reason || undefined
+      reason: callLog.reason || undefined,
+      quality: callLog.quality || undefined
     };
 
     res.status(200).json({
@@ -344,6 +346,367 @@ router.delete('/:id', protect, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to delete call log'
+    });
+  }
+});
+
+// @route   GET /api/calls/analytics/summary
+// @desc    Get comprehensive call analytics summary
+// @access  Private
+router.get('/analytics/summary', protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { period = '30d' } = req.query;
+
+    // Calculate date range
+    const now = new Date();
+    let startDate = new Date();
+    
+    switch (period) {
+      case '7d':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case '30d':
+        startDate.setDate(now.getDate() - 30);
+        break;
+      case '90d':
+        startDate.setDate(now.getDate() - 90);
+        break;
+      case '1y':
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+      default:
+        startDate.setDate(now.getDate() - 30);
+    }
+
+    // Get call statistics
+    const stats = await CallLog.aggregate([
+      {
+        $match: {
+          $or: [
+            { callerId: userId },
+            { recipientId: userId }
+          ],
+          createdAt: { $gte: startDate, $lte: now }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalCalls: { $sum: 1 },
+          completedCalls: {
+            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
+          },
+          missedCalls: {
+            $sum: { $cond: [{ $eq: ['$status', 'missed'] }, 1, 0] }
+          },
+          rejectedCalls: {
+            $sum: { $cond: [{ $eq: ['$status', 'rejected'] }, 1, 0] }
+          },
+          failedCalls: {
+            $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] }
+          },
+          totalDuration: { $sum: '$duration' },
+          voiceCalls: {
+            $sum: { $cond: [{ $eq: ['$callType', 'voice'] }, 1, 0] }
+          },
+          videoCalls: {
+            $sum: { $cond: [{ $eq: ['$callType', 'video'] }, 1, 0] }
+          },
+          outgoingCalls: {
+            $sum: { $cond: [{ $eq: ['$direction', 'outgoing'] }, 1, 0] }
+          },
+          incomingCalls: {
+            $sum: { $cond: [{ $eq: ['$direction', 'incoming'] }, 1, 0] }
+          }
+        }
+      }
+    ]);
+
+    // Get daily call volume
+    const dailyVolume = await CallLog.aggregate([
+      {
+        $match: {
+          $or: [
+            { callerId: userId },
+            { recipientId: userId }
+          ],
+          createdAt: { $gte: startDate, $lte: now }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$createdAt' }
+          },
+          count: { $sum: 1 },
+          totalDuration: { $sum: '$duration' }
+        }
+      },
+      {
+        $sort: { _id: 1 }
+      }
+    ]);
+
+    // Get top contacts
+    const topContacts = await CallLog.aggregate([
+      {
+        $match: {
+          $or: [
+            { callerId: userId },
+            { recipientId: userId }
+          ],
+          createdAt: { $gte: startDate, $lte: now }
+        }
+      },
+      {
+        $addFields: {
+          otherUser: {
+            $cond: [
+              { $eq: ['$callerId', userId] },
+              '$recipientId',
+              '$callerId'
+            ]
+          }
+        }
+      },
+      {
+        $group: {
+          _id: '$otherUser',
+          callCount: { $sum: 1 },
+          totalDuration: { $sum: '$duration' },
+          completedCalls: {
+            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
+          },
+          lastCall: { $max: '$createdAt' }
+        }
+      },
+      {
+        $sort: { callCount: -1 }
+      },
+      {
+        $limit: 10
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'userInfo'
+        }
+      },
+      {
+        $unwind: '$userInfo'
+      },
+      {
+        $project: {
+          userId: '$_id',
+          email: '$userInfo.email',
+          callCount: 1,
+          totalDuration: 1,
+          completedCalls: 1,
+          lastCall: 1
+        }
+      }
+    ]);
+
+    // Get call quality analytics
+    const qualityStats = await CallLog.aggregate([
+      {
+        $match: {
+          $or: [
+            { callerId: userId },
+            { recipientId: userId }
+          ],
+          createdAt: { $gte: startDate, $lte: now },
+          'quality.audioQuality': { $exists: true }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          avgAudioQuality: { $avg: '$quality.audioQuality' },
+          avgVideoQuality: { $avg: '$quality.videoQuality' },
+          avgConnectionStability: { $avg: '$quality.connectionStability' },
+          totalQualityCalls: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const result = {
+      period,
+      dateRange: { start: startDate, end: now },
+      stats: stats[0] || {
+        totalCalls: 0,
+        completedCalls: 0,
+        missedCalls: 0,
+        rejectedCalls: 0,
+        failedCalls: 0,
+        totalDuration: 0,
+        voiceCalls: 0,
+        videoCalls: 0,
+        outgoingCalls: 0,
+        incomingCalls: 0
+      },
+      dailyVolume,
+      topContacts,
+      qualityStats: qualityStats[0] || {
+        avgAudioQuality: 0,
+        avgVideoQuality: 0,
+        avgConnectionStability: 0,
+        totalQualityCalls: 0
+      }
+    };
+
+    res.status(200).json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error fetching call analytics:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch call analytics'
+    });
+  }
+});
+
+// @route   GET /api/calls/analytics/missed
+// @desc    Get missed calls analytics
+// @access  Private
+router.get('/analytics/missed', protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { period = '30d' } = req.query;
+
+    // Calculate date range
+    const now = new Date();
+    let startDate = new Date();
+    
+    switch (period) {
+      case '7d':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case '30d':
+        startDate.setDate(now.getDate() - 30);
+        break;
+      case '90d':
+        startDate.setDate(now.getDate() - 90);
+        break;
+      default:
+        startDate.setDate(now.getDate() - 30);
+    }
+
+    // Get missed calls by caller
+    const missedCalls = await CallLog.aggregate([
+      {
+        $match: {
+          recipientId: userId,
+          status: 'missed',
+          createdAt: { $gte: startDate, $lte: now }
+        }
+      },
+      {
+        $group: {
+          _id: '$callerId',
+          missedCount: { $sum: 1 },
+          totalMissedDuration: { $sum: '$duration' },
+          lastMissedCall: { $max: '$createdAt' },
+          callTypes: { $addToSet: '$callType' }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'callerInfo'
+        }
+      },
+      {
+        $unwind: '$callerInfo'
+      },
+      {
+        $project: {
+          callerId: '$_id',
+          callerEmail: '$callerInfo.email',
+          missedCount: 1,
+          totalMissedDuration: 1,
+          lastMissedCall: 1,
+          callTypes: 1
+        }
+      },
+      {
+        $sort: { missedCount: -1 }
+      }
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        period,
+        missedCalls
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching missed calls analytics:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch missed calls analytics'
+    });
+  }
+});
+
+// @route   POST /api/calls/quality
+// @desc    Update call quality metrics
+// @access  Private
+router.post('/quality', protect, async (req, res) => {
+  try {
+    const { callId, audioQuality, videoQuality, connectionStability } = req.body;
+    const userId = req.user.id;
+
+    if (!callId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Call ID is required'
+      });
+    }
+
+    const callLog = await CallLog.findById(callId);
+    if (!callLog) {
+      return res.status(404).json({
+        success: false,
+        message: 'Call log not found'
+      });
+    }
+
+    // Verify user is involved in this call
+    if (callLog.callerId.toString() !== userId && callLog.recipientId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to update this call log'
+      });
+    }
+
+    // Update quality metrics
+    const quality = {};
+    if (audioQuality !== undefined) quality.audioQuality = Math.max(1, Math.min(5, audioQuality));
+    if (videoQuality !== undefined) quality.videoQuality = Math.max(1, Math.min(5, videoQuality));
+    if (connectionStability !== undefined) quality.connectionStability = Math.max(1, Math.min(5, connectionStability));
+
+    callLog.quality = { ...callLog.quality, ...quality };
+    await callLog.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Call quality updated successfully',
+      data: callLog.quality
+    });
+  } catch (error) {
+    console.error('Error updating call quality:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update call quality'
     });
   }
 });

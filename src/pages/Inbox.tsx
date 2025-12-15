@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useCall } from '@/hooks/useCall';
 import { apiClient } from '@/integrations/api/client';
 import { socketService } from '@/services/socketService';
+import MissedCallNotification from '@/components/MissedCallNotification';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -305,6 +306,42 @@ export default function Inbox() {
     }
   };
 
+  const handleCallBack = (userId: string) => {
+    // Find the chat or create a new one for this user
+    const existingChat = chats.find(chat => 
+      chat.participants.some(p => p._id === userId)
+    );
+    
+    if (existingChat) {
+      handleVoiceCall(existingChat._id, userId);
+    } else {
+      // Create new chat and then call
+      apiClient.createChat(userId).then(response => {
+        if (response.success) {
+          handleVoiceCall(response.data._id, userId);
+        }
+      });
+    }
+  };
+
+  const handleMessage = (userId: string) => {
+    // Find the chat or create a new one for this user
+    const existingChat = chats.find(chat => 
+      chat.participants.some(p => p._id === userId)
+    );
+    
+    if (existingChat) {
+      handleChatClick(existingChat._id);
+    } else {
+      // Create new chat and navigate
+      apiClient.createChat(userId).then(response => {
+        if (response.success) {
+          navigate(`/chat/${response.data._id}`);
+        }
+      });
+    }
+  };
+
   const getCallIcon = (call: CallLog) => {
     switch (call.direction) {
       case 'incoming':
@@ -370,6 +407,12 @@ export default function Inbox() {
           </TabsList>
 
           <TabsContent value="all" className="space-y-4">
+            {/* Missed Call Notifications */}
+            <MissedCallNotification 
+              onCallBack={handleCallBack}
+              onMessage={handleMessage}
+            />
+
             {/* Recent Chats */}
             {filteredChats.length > 0 && (
               <div className="space-y-2">
