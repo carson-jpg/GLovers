@@ -2,6 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import bodyParser from 'body-parser';
 import { createServer } from 'http';
 import connectDB from './config/database.js';
 import socketService from './services/socketService.js';
@@ -44,9 +45,9 @@ app.use((req, res, next) => {
     return next();
   }
   
-  // Parse JSON for other content types
+  // Use body-parser for JSON requests
   if (contentType.includes('application/json')) {
-    return express.json({ limit: '10mb' })(req, res, next);
+    return bodyParser.json({ limit: '10mb' })(req, res, next);
   }
   
   next();
