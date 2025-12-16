@@ -25,7 +25,7 @@ const upload = multer({
 });
 
 // @route   GET /api/timeline/posts
-// @desc    Get timeline posts from opposite gender users
+// @desc    Get timeline posts - user's own posts plus opposite gender posts
 // @access  Private
 router.get('/posts', protect, async (req, res) => {
   try {
@@ -39,19 +39,28 @@ router.get('/posts', protect, async (req, res) => {
       });
     }
 
-    // Define opposite gender filter
-    let oppositeGenderFilter = {};
+    // Build filter to show user's own posts plus opposite gender posts
+    let genderFilter = {};
     if (currentUserProfile.gender === 'male') {
-      oppositeGenderFilter = { 'profile.gender': 'female' };
+      genderFilter = {
+        $or: [
+          { userId: req.user.id }, // User's own posts
+          { 'profile.gender': 'female' } // Opposite gender posts
+        ]
+      };
     } else if (currentUserProfile.gender === 'female') {
-      oppositeGenderFilter = { 'profile.gender': 'male' };
+      genderFilter = {
+        $or: [
+          { userId: req.user.id }, // User's own posts
+          { 'profile.gender': 'male' } // Opposite gender posts
+        ]
+      };
     }
-    // If gender is 'other', show all posts (or customize as needed)
+    // If gender is 'other', show all posts
 
     const posts = await TimelinePost.find({
       isActive: true,
-      userId: { $ne: req.user.id }, // Exclude current user's own posts
-      ...oppositeGenderFilter
+      ...genderFilter
     })
       .populate('userId', 'email')
       .sort({ createdAt: -1 })
@@ -103,6 +112,14 @@ router.post(
     const { caption } = req.body;
 
     try {
+      // Check if Cloudinary is configured
+      if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+        return res.status(500).json({
+          success: false,
+          message: 'Image upload service not configured. Please contact administrator.'
+        });
+      }
+
       // Upload image to Cloudinary
       const uploadResult = await uploadImage(req.file.buffer);
       
@@ -112,7 +129,7 @@ router.post(
       if (!profile) {
         return res.status(400).json({
           success: false,
-          message: 'Profile not found'
+          message: 'Profile not found. Please create your profile first.'
         });
       }
 
@@ -138,9 +155,19 @@ router.post(
       });
     } catch (error) {
       console.error('Timeline post creation error:', error);
+      
+      // Provide specific error messages based on error type
+      let errorMessage = 'Failed to create post';
+      if (error.message && error.message.includes('Cloudinary')) {
+        errorMessage = 'Image upload failed. Please try again with a different image.';
+      } else if (error.message && error.message.includes('profile')) {
+        errorMessage = 'Profile information is required. Please complete your profile.';
+      }
+      
       res.status(500).json({
         success: false,
-        message: 'Failed to create post'
+        message: errorMessage,
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
   }
