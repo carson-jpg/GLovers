@@ -1,15 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
+    <!-- Allow all network traffic for debugging -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system"/>
+            <certificates src="user"/>
+            <certificates src="authority"/>
+        </trust-anchors>
+    </base-config>
+    
+    <!-- Explicit domains for HTTPS -->
+    <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">glovers.onrender.com</domain>
         <domain includeSubdomains="true">*.onrender.com</domain>
         <domain includeSubdomains="true">accounts.google.com</domain>
         <domain includeSubdomains="true">oauth2.googleapis.com</domain>
     </domain-config>
-    <base-config cleartextTrafficPermitted="true">
+    
+    <!-- Debug configuration for development -->
+    <debug-overrides>
         <trust-anchors>
             <certificates src="system"/>
             <certificates src="user"/>
+            <certificates src="authority"/>
         </trust-anchors>
-    </base-config>
+    </debug-overrides>
 </network-security-config>

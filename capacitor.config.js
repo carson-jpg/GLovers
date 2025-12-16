@@ -3,7 +3,9 @@ export default {
   appName: 'GLovers',
   webDir: 'dist',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'https',
+    cleartext: true,
+    allowInsecureConnections: true
   },
   plugins: {
     SplashScreen: {
@@ -28,6 +30,9 @@ export default {
       style: "dark",
       backgroundColor: "#ffffff",
     },
+    HttpServerPlugin: {
+      enabled: true
+    }
   },
   android: {
     buildOptions: {
@@ -41,5 +46,6 @@ export default {
     },
     allowMixedContent: true,
     webContentsDebuggingEnabled: true,
+    networkSecurityConfig: "@xml/network_security_config"
   }
 };

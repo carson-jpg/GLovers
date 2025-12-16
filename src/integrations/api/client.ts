@@ -40,51 +40,85 @@ class ApiClient {
         ...options.headers,
       },
       credentials: 'include',
-      signal: AbortSignal.timeout(15000), // Increased timeout for mobile
+      signal: AbortSignal.timeout(30000), // Increased timeout to 30 seconds for mobile
       ...options,
     };
 
-    console.log(`Making API request to: ${url}`);
+    console.log(`🔗 Making API request to: ${url}`);
+    console.log(`📋 Request method: ${options.method || 'GET'}`);
+    console.log(`📋 Request headers:`, config.headers);
+    console.log(`🔑 Has auth token: ${!!this.token}`);
 
     try {
       const response = await fetch(url, config);
       
+      console.log(`📊 Response status: ${response.status} ${response.statusText}`);
+      console.log(`📊 Response headers:`, Object.fromEntries(response.headers.entries()));
+      
       if (!response.ok) {
         const errorText = await response.text();
-        let errorMessage = 'An error occurred';
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
         
         try {
           const errorData = JSON.parse(errorText);
-          errorMessage = errorData.message || errorMessage;
+          errorMessage = errorData.message || errorData.error || errorMessage;
         } catch {
-          errorMessage = errorText || errorMessage;
+          if (errorText) {
+            errorMessage = errorText;
+          }
         }
         
-        console.error(`API request failed (${response.status}):`, errorMessage);
+        console.error(`❌ API request failed (${response.status}):`, errorMessage);
+        console.error(`❌ Error response body:`, errorText);
         throw new Error(errorMessage);
       }
 
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const result = await response.json();
-        console.log(`API request successful: ${endpoint}`);
+        console.log(`✅ API request successful: ${endpoint}`);
+        console.log(`✅ Response data:`, result);
         return result;
       } else {
         const result = await response.text();
-        console.log(`API request successful: ${endpoint}`);
+        console.log(`✅ API request successful: ${endpoint}`);
         return result;
       }
     } catch (error) {
-      console.error('API request failed:', error);
+      console.error('❌ API request failed:', error);
       
-      // Handle specific error types
+      // Enhanced error logging for mobile debugging
       if (error instanceof TypeError && error.message.includes('fetch')) {
-        throw new Error('Network error: Please check your internet connection and try again');
+        const errorMsg = `Network error: Unable to connect to ${url}. Please check your internet connection.`;
+        console.error('🌐 Network error details:', {
+          url,
+          message: error.message,
+          stack: error.stack
+        });
+        throw new Error(errorMsg);
       }
       
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error('Request timeout: Please check your connection and try again');
+        const errorMsg = `Request timeout: ${url} took too long to respond. Please try again.`;
+        console.error('⏰ Timeout error details:', {
+          url,
+          timeout: 30000
+        });
+        throw new Error(errorMsg);
       }
+      
+      // Log the full error for debugging
+      console.error('🚨 Full error details:', {
+        url,
+        errorType: error?.constructor?.name,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        config: {
+          method: options.method,
+          headers: config.headers,
+          hasBody: !!options.body
+        }
+      });
       
       throw error;
     }
