@@ -192,3 +192,40 @@ auto-generated/
 # package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
+
+# Android/Capacitor specific
+android/local.properties
+android/.gradle/
+android/app/build/
+android/capacitor.settings.gradle
+android/capacitor-cordova-android-plugins/
+android/gradle/
+android/gradlew
+android/gradlew.bat
+
+# Android specific build outputs
+*.apk
+*.ap_
+*.aab
+*.keystore
+*.jks
+*.keystore
+
+# Android studio
+.idea/
+*.iml
+.externalNativeBuild
+.cxx/
+
+# Android Profiling
+*.hprof
+
+# Cordova
+cordova_plugins.js
+www/
+platform_www/
+
+# Capacitor
+android/app/src/main/assets/capacitor.plugins.json
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/public/

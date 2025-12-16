@@ -40,20 +40,45 @@ class ApiClient {
         ...options.headers,
       },
       credentials: 'include',
+      signal: AbortSignal.timeout(10000), // 10 second timeout
       ...options,
     };
 
     try {
       const response = await fetch(url, config);
-      const data = await response.json();
-
+      
       if (!response.ok) {
-        throw new Error(data.message || 'An error occurred');
+        const errorText = await response.text();
+        let errorMessage = 'An error occurred';
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        
+        throw new Error(errorMessage);
       }
 
-      return data;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        return await response.json();
+      } else {
+        return await response.text();
+      }
     } catch (error) {
       console.error('API request failed:', error);
+      
+      // Handle specific error types
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Network error: Please check your internet connection');
+      }
+      
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Request timeout: Please try again');
+      }
+      
       throw error;
     }
   }
