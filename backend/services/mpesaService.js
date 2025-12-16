@@ -13,6 +13,10 @@ class MpesaService {
       ? 'https://sandbox.safaricom.co.ke'
       : 'https://api.safaricom.co.ke';
 
+    // Token caching
+    this.accessToken = null;
+    this.tokenExpiry = null;
+
     // Log configuration status (without exposing secrets)
     console.log('M-Pesa Service Configuration:', {
       hasConsumerKey: !!this.consumerKey,
@@ -31,12 +35,20 @@ class MpesaService {
     }
   }
 
-  // Generate OAuth token
+  // Generate OAuth token with caching
   async getAccessToken() {
     try {
+      // Check if we have a valid cached token
+      if (this.accessToken && this.tokenExpiry && new Date() < this.tokenExpiry) {
+        console.log('Using cached access token');
+        return this.accessToken;
+      }
+
       if (!this.consumerKey || !this.consumerSecret) {
         throw new Error('M-Pesa credentials not configured');
       }
+
+      console.log('Generating new access token...');
 
       const auth = Buffer.from(`${this.consumerKey}:${this.consumerSecret}`).toString('base64');
       
@@ -47,7 +59,7 @@ class MpesaService {
             'Authorization': `Basic ${auth}`,
             'Content-Type': 'application/json',
           },
-          timeout: 10000,
+          timeout: 15000,
         }
       );
 
@@ -55,7 +67,14 @@ class MpesaService {
         throw new Error('No access token received from M-Pesa');
       }
 
-      return response.data.access_token;
+      // Cache the token for 50 minutes (tokens expire after 1 hour)
+      this.accessToken = response.data.access_token;
+      this.tokenExpiry = new Date(Date.now() + 50 * 60 * 1000);
+
+      console.log('✅ New access token generated and cached');
+      console.log('Token expires at:', this.tokenExpiry.toISOString());
+
+      return this.accessToken;
     } catch (error) {
       console.error('Error getting access token:', {
         message: error.message,
@@ -64,6 +83,11 @@ class MpesaService {
         baseURL: this.baseURL,
         hasCredentials: !!(this.consumerKey && this.consumerSecret)
       });
+      
+      // Clear cached token on error
+      this.accessToken = null;
+      this.tokenExpiry = null;
+      
       throw new Error(`Failed to get M-Pesa access token: ${error.message}`);
     }
   }
@@ -109,8 +133,17 @@ class MpesaService {
     return true;
   }
 
-  // Initiate STK Push
-  async initiateStkPush(phoneNumber, amount) {
+  // Clear cached token (useful for debugging)
+  clearTokenCache() {
+    this.accessToken = null;
+    this.tokenExpiry = null;
+    console.log('🔄 Token cache cleared');
+  }
+
+  // Initiate STK Push with retry logic
+  async initiateStkPush(phoneNumber, amount, retryCount = 0) {
+    const maxRetries = 2;
+    
     try {
       // Validate inputs
       if (!this.shortcode || !this.passkey) {
@@ -124,7 +157,14 @@ class MpesaService {
       // Format phone number
       const formattedPhone = this.formatPhoneNumber(phoneNumber);
       
-      const accessToken = await this.getAccessToken();
+      let accessToken;
+      try {
+        accessToken = await this.getAccessToken();
+      } catch (tokenError) {
+        console.error('Failed to get access token:', tokenError.message);
+        throw new Error(`Authentication failed: ${tokenError.message}`);
+      }
+      
       const { password, timestamp } = this.generatePassword();
 
       const requestBody = {
@@ -146,7 +186,8 @@ class MpesaService {
         Amount: requestBody.Amount,
         PartyA: requestBody.PartyA,
         CallBackURL: requestBody.CallBackURL,
-        environment: this.environment
+        environment: this.environment,
+        retryCount
       });
 
       const response = await axios.post(
@@ -174,12 +215,28 @@ class MpesaService {
         message: error.message,
         response: error.response?.data,
         status: error.response?.status,
+        retryCount,
+        maxRetries,
         config: error.config ? {
           url: error.config.url,
           method: error.config.method,
           headers: error.config.headers
         } : null
       });
+      
+      // Handle authentication errors with retry
+      if (error.response?.data?.errorCode === '404.001.03' && retryCount < maxRetries) {
+        console.log(`Retrying STK Push due to auth error (attempt ${retryCount + 1}/${maxRetries})`);
+        
+        // Clear cached token to force regeneration
+        this.accessToken = null;
+        this.tokenExpiry = null;
+        
+        // Wait a bit before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        return this.initiateStkPush(phoneNumber, amount, retryCount + 1);
+      }
       
       return {
         success: false,
