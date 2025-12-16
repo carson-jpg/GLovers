@@ -18,20 +18,8 @@ import Payment from "./pages/Payment";
 import Discover from "./pages/Discover";
 import CallLogs from "./pages/CallLogs";
 import NotFound from "./pages/NotFound";
-import TestPage from "./pages/TestPage";
-import MobileNav from "./components/MobileNav";
-import { Capacitor } from "@capacitor/core";
-import { MobileUtils } from "./lib/mobile-utils";
 
 const queryClient = new QueryClient();
-
-// Check if running in Capacitor (mobile app)
-const isMobileApp = Capacitor.isNativePlatform();
-
-// Pages that should show mobile navigation
-const showMobileNav = isMobileApp && !['/auth', '/chat', '/create-profile', '/subscription', '/payment'].some(path =>
-  window.location.pathname.includes(path)
-);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -39,35 +27,29 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <div className={`${isMobileApp ? 'mobile-container' : ''} ${isMobileApp ? 'mobile-safe-area' : ''}`}>
-          <BrowserRouter
-            future={{
-              v7_startTransition: true,
-              v7_relativeSplatPath: true
-            }}
-          >
-            <div className={`${isMobileApp ? 'pb-16' : ''}`}>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/auth" element={<Auth />} />
-                <Route path="/inbox" element={<Inbox />} />
-                <Route path="/chat/:chatId" element={<Chat />} />
-                <Route path="/profile" element={<Profile />} />
-                <Route path="/discover" element={<Discover />} />
-                <Route path="/timeline" element={<Timeline />} />
-                <Route path="/profile/:userId" element={<PublicProfile />} />
-                <Route path="/create-profile" element={<CreateProfile />} />
-                <Route path="/subscription" element={<Subscription />} />
-                <Route path="/payment" element={<Payment />} />
-                <Route path="/call-logs" element={<CallLogs />} />
-                <Route path="/test" element={<TestPage />} />
-                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </div>
-            {showMobileNav && <MobileNav />}
-          </BrowserRouter>
-        </div>
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true
+          }}
+        >
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/inbox" element={<Inbox />} />
+            <Route path="/chat/:chatId" element={<Chat />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/discover" element={<Discover />} />
+            <Route path="/timeline" element={<Timeline />} />
+            <Route path="/profile/:userId" element={<PublicProfile />} />
+            <Route path="/create-profile" element={<CreateProfile />} />
+            <Route path="/subscription" element={<Subscription />} />
+            <Route path="/payment" element={<Payment />} />
+            <Route path="/call-logs" element={<CallLogs />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>

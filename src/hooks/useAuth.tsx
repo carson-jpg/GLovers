@@ -1,5 +1,4 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { Capacitor } from '@capacitor/core';
 import { apiClient, type User } from '@/integrations/api/client';
 import { socketService } from '@/services/socketService';
 
@@ -89,72 +88,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = async () => {
     try {
-      // Check if running in Capacitor (native mobile app)
-      const isMobile = Capacitor.isNativePlatform();
-      
-      if (isMobile) {
-        // For mobile apps, use a simplified approach
-        // Open Google OAuth in system browser and handle callback
-        const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '448558588562-5ko63opc5cs7nae83mqmr9n7ukh9r8t0.apps.googleusercontent.com';
-        
-        // Create a callback URL that will work with our app
-        const callbackUrl = `${window.location.origin}/auth/google-callback`;
-        
-        // Create Google OAuth URL
-        const googleAuthUrl = `https://accounts.google.com/oauth/authorize?` +
-          `client_id=${clientId}&` +
-          `redirect_uri=${encodeURIComponent(callbackUrl)}&` +
-          `response_type=code&` +
-          `scope=${encodeURIComponent('openid email profile')}&` +
-          `access_type=offline&` +
-          `prompt=consent&` +
-          `state=mobile_auth`;
+      // Load Google Sign-In SDK
+      if (!window.google) {
+        await loadGoogleSDK();
+      }
 
-        // For mobile, show instructions for manual sign-in
-        // In a real implementation, you'd use a custom URL scheme or deep linking
-        alert('Please sign in with Google in your device browser and then return to the app.');
-        
-        // Open in system browser
-        window.open(googleAuthUrl, '_system');
-        
-        return { error: null };
-      } else {
-        // For web, use Google Sign-In SDK
-        if (!window.google) {
-          await loadGoogleSDK();
-        }
-
-        // Initialize Google Sign-In
-        const googleUser = await new Promise<any>((resolve, reject) => {
-          window.google.accounts.id.initialize({
-            client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '448558588562-5ko63opc5cs7nae83mqmr9n7ukh9r8t0.apps.googleusercontent.com',
-            callback: (response: any) => {
-              if (response.credential) {
-                resolve(response);
-              } else {
-                reject(new Error('No credential received'));
-              }
-            },
-          });
-
-          window.google.accounts.id.prompt();
+      // Initialize Google Sign-In
+      const googleUser = await new Promise<any>((resolve, reject) => {
+        window.google.accounts.id.initialize({
+          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || 'your_google_client_id',
+          callback: (response: any) => {
+            if (response.credential) {
+              resolve(response);
+            } else {
+              reject(new Error('No credential received'));
+            }
+          },
         });
 
-        // Send token to backend
-        const response = await apiClient.signInWithGoogle(googleUser.credential);
+        window.google.accounts.id.prompt();
+      });
 
-        if (response.success && response.user) {
-          setUser(response.user);
-          // Connect socket service when user signs in with Google
-          socketService.connect();
-          socketService.setUserOnline();
-          return { error: null };
-        }
+      // Send token to backend
+      const response = await apiClient.signInWithGoogle(googleUser.credential);
 
-        return { error: new Error('Failed to sign in with Google') };
+      if (response.success && response.user) {
+        setUser(response.user);
+        // Connect socket service when user signs in with Google
+        socketService.connect();
+        socketService.setUserOnline();
+        return { error: null };
       }
+
+      return { error: new Error('Failed to sign in with Google') };
     } catch (error: any) {
-      console.error('Google sign-in error:', error);
       return { error };
     }
   };
