@@ -40,9 +40,11 @@ class ApiClient {
         ...options.headers,
       },
       credentials: 'include',
-      signal: AbortSignal.timeout(10000), // 10 second timeout
+      signal: AbortSignal.timeout(15000), // Increased timeout for mobile
       ...options,
     };
+
+    console.log(`Making API request to: ${url}`);
 
     try {
       const response = await fetch(url, config);
@@ -58,25 +60,30 @@ class ApiClient {
           errorMessage = errorText || errorMessage;
         }
         
+        console.error(`API request failed (${response.status}):`, errorMessage);
         throw new Error(errorMessage);
       }
 
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
-        return await response.json();
+        const result = await response.json();
+        console.log(`API request successful: ${endpoint}`);
+        return result;
       } else {
-        return await response.text();
+        const result = await response.text();
+        console.log(`API request successful: ${endpoint}`);
+        return result;
       }
     } catch (error) {
       console.error('API request failed:', error);
       
       // Handle specific error types
       if (error instanceof TypeError && error.message.includes('fetch')) {
-        throw new Error('Network error: Please check your internet connection');
+        throw new Error('Network error: Please check your internet connection and try again');
       }
       
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error('Request timeout: Please try again');
+        throw new Error('Request timeout: Please check your connection and try again');
       }
       
       throw error;

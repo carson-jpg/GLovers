@@ -43,9 +43,16 @@ app.use(
       process.env.FRONTEND_URL,
       'https://g-lovers.vercel.app',
       'http://localhost:5173',
-      'http://localhost:8080'
+      'http://localhost:8080',
+      'capacitor://localhost',
+      'http://localhost',
+      // Allow all Capacitor apps (for development)
+      true // Allow all origins for now - restrict in production
     ].filter(Boolean),
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range']
   })
 );
 
