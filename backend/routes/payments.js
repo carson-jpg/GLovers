@@ -296,18 +296,48 @@ router.post('/check-status', protect, async (req, res) => {
 // @desc    M-Pesa callback URL
 // @access  Public (called by M-Pesa)
 router.post('/callback', async (req, res) => {
+  console.log('🔔 M-Pesa Callback Received');
+  
   try {
     const callbackData = req.body;
+    
+    console.log('📨 Callback data structure:', {
+      hasBody: !!callbackData.Body,
+      hasStkCallback: !!callbackData.Body?.stkCallback,
+      resultCode: callbackData.Body?.stkCallback?.ResultCode,
+      resultDesc: callbackData.Body?.stkCallback?.ResultDesc
+    });
+
     const result = mpesaService.processCallback(callbackData);
 
+    console.log('📊 Callback processing result:', {
+      success: result.success,
+      resultCode: result.resultCode,
+      resultDesc: result.resultDesc,
+      checkoutRequestId: result.checkoutRequestId,
+      transactionId: result.transactionId,
+      hasError: !!result.error
+    });
+
     if (result.checkoutRequestId) {
+      console.log('🔍 Looking for payment with checkoutRequestId:', result.checkoutRequestId);
+      
       const payment = await Payment.findOne({
         'metadata.checkoutRequestId': result.checkoutRequestId
       });
 
       if (payment) {
+        console.log('💳 Payment found:', {
+          paymentId: payment._id,
+          userId: payment.userId,
+          currentStatus: payment.status,
+          amount: payment.amount
+        });
+
         if (result.success) {
           // Payment successful
+          console.log('✅ Processing successful payment...');
+          
           await Payment.findByIdAndUpdate(payment._id, {
             status: 'completed',
             transactionCode: result.transactionId
@@ -338,22 +368,33 @@ router.post('/callback', async (req, res) => {
             subscriptionId: subscription._id
           });
 
-          console.log(`Payment completed for user ${payment.userId}`);
+          console.log(`🎉 Payment completed for user ${payment.userId} - Transaction: ${result.transactionId}`);
         } else {
           // Payment failed
+          console.log('❌ Processing failed payment...', {
+            resultCode: result.resultCode,
+            resultDesc: result.resultDesc
+          });
+          
           await Payment.findByIdAndUpdate(payment._id, {
-            status: 'failed'
+            status: 'failed',
+            'metadata.callbackResult': result
           });
 
-          console.log(`Payment failed for user ${payment.userId}: ${result.resultDesc}`);
+          console.log(`💔 Payment failed for user ${payment.userId}: ${result.resultDesc} (Code: ${result.resultCode})`);
         }
+      } else {
+        console.error('❌ Payment not found for checkoutRequestId:', result.checkoutRequestId);
       }
+    } else {
+      console.error('❌ No checkoutRequestId in callback result:', result);
     }
 
+    console.log('✅ Callback processing completed');
     res.status(200).json({ success: true });
   } catch (error) {
-    console.error('Callback error:', error);
-    res.status(500).json({ success: false });
+    console.error('💥 Callback error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

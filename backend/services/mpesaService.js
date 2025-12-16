@@ -286,19 +286,42 @@ class MpesaService {
     }
   }
 
-  // Process callback
+  // Process callback with improved error handling
   processCallback(callbackData) {
     try {
+      console.log('🔔 Processing M-Pesa callback:', JSON.stringify(callbackData, null, 2));
+      
       const { Body } = callbackData;
       
-      if (Body.stkCallback.CallbackMetadata) {
-        const metadata = Body.stkCallback.CallbackMetadata.Item;
-        const resultCode = Body.stkCallback.ResultCode;
-        const resultDesc = Body.stkCallback.ResultDesc;
-        
-        let transactionId = null;
-        let amount = null;
-        let phoneNumber = null;
+      if (!Body || !Body.stkCallback) {
+        console.error('Invalid callback data structure:', callbackData);
+        return {
+          success: false,
+          error: 'Invalid callback data structure'
+        };
+      }
+
+      const stkCallback = Body.stkCallback;
+      const resultCode = stkCallback.ResultCode;
+      const resultDesc = stkCallback.ResultDesc;
+      const checkoutRequestId = stkCallback.CheckoutRequestID;
+      const merchantRequestId = stkCallback.MerchantRequestID;
+
+      console.log('📊 Callback analysis:', {
+        resultCode,
+        resultDesc,
+        checkoutRequestId,
+        merchantRequestId,
+        hasMetadata: !!stkCallback.CallbackMetadata
+      });
+
+      let transactionId = null;
+      let amount = null;
+      let phoneNumber = null;
+      
+      // Handle callback with metadata (successful payment)
+      if (stkCallback.CallbackMetadata && stkCallback.CallbackMetadata.Item) {
+        const metadata = stkCallback.CallbackMetadata.Item;
         
         metadata.forEach(item => {
           if (item.Name === 'MpesaReceiptNumber') {
@@ -310,29 +333,31 @@ class MpesaService {
           }
         });
 
-        return {
-          success: resultCode === 0,
-          resultCode,
-          resultDesc,
-          transactionId,
-          amount,
-          phoneNumber,
-          checkoutRequestId: Body.stkCallback.CheckoutRequestID,
-          merchantRequestId: Body.stkCallback.MerchantRequestID
-        };
+        console.log('💰 Extracted metadata:', { transactionId, amount, phoneNumber });
       }
+
+      const isSuccess = resultCode === 0;
       
-      return {
-        success: false,
-        resultCode: Body.stkCallback.ResultCode,
-        resultDesc: Body.stkCallback.ResultDesc,
-        checkoutRequestId: Body.stkCallback.CheckoutRequestID
+      const result = {
+        success: isSuccess,
+        resultCode,
+        resultDesc,
+        transactionId,
+        amount,
+        phoneNumber,
+        checkoutRequestId,
+        merchantRequestId
       };
+
+      console.log(`✅ Callback processed: ${isSuccess ? 'SUCCESS' : 'FAILED'} - ${resultDesc}`);
+      
+      return result;
     } catch (error) {
       console.error('Callback processing error:', error);
       return {
         success: false,
-        error: 'Failed to process callback'
+        error: `Failed to process callback: ${error.message}`,
+        rawData: callbackData
       };
     }
   }
