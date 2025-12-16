@@ -139,6 +139,7 @@ router.post(
         profile: {
           _id: profile._id,
           fullName: profile.fullName,
+          gender: profile.gender,
           avatarUrl: profile.avatarUrl,
           location: profile.location
         },
