@@ -6,6 +6,7 @@ import { createServer } from 'http';
 import connectDB from './config/database.js';
 import socketService from './services/socketService.js';
 
+import phoneRoutes from './routes/phone.js';
 // Import routes
 import authRoutes from './routes/auth.js';
 import profileRoutes from './routes/profiles.js';
@@ -53,6 +54,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/profiles', profileRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/phone', phoneRoutes); // Phone number restriction routes
 // Mount optimized chat routes BEFORE regular chat routes to avoid conflicts
 app.use('/api/chats/optimized', chatRoutesOptimized); // Optimized chat routes
 app.use('/api/chats', chatRoutes); // Regular chat routes

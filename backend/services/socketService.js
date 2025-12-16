@@ -2,6 +2,7 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import Chat from '../models/Chat.js';
 import User from '../models/User.js';
+import Subscription from '../models/Subscription.js';
 
 class SocketService {
   constructor() {
@@ -10,6 +11,68 @@ class SocketService {
     this.userSockets = new Map(); // socketId -> userId
     this.typingUsers = new Map(); // chatId -> Set of userIds
     this.userStatus = new Map(); // userId -> { status, lastSeen }
+    
+    // Phone number detection patterns
+    this.PHONE_PATTERNS = [
+      /\+?\d{1,4}[-.\s]?\(?\d{1,3}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}/g, // International format
+      /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/g, // US format
+      /\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/g, // US format with parentheses
+      /\+?\d{10,15}/g, // Simple 10-15 digit format
+    ];
+  }
+
+  // Function to detect phone numbers in text
+  containsPhoneNumber(text) {
+    if (!text || typeof text !== 'string') return false;
+    
+    for (const pattern of this.PHONE_PATTERNS) {
+      const matches = text.match(pattern);
+      if (matches) {
+        // Filter out obviously non-phone numbers
+        const validNumbers = matches.filter(number =>
+          number.replace(/\D/g, '').length >= 10
+        );
+        if (validNumbers.length > 0) return true;
+      }
+    }
+    return false;
+  }
+
+  // Function to check if user has active subscription
+  async hasActiveSubscription(userId) {
+    try {
+      const subscription = await Subscription.getActiveSubscription(userId);
+      return subscription !== null;
+    } catch (error) {
+      console.error('Error checking subscription:', error);
+      return false;
+    }
+  }
+
+  // Function to check and increment message count for free users
+  async checkMessageLimit(userId) {
+    try {
+      const user = await User.findById(userId);
+      if (!user) return false;
+
+      // If user has subscription, no limits
+      const hasSubscription = await this.hasActiveSubscription(userId);
+      if (hasSubscription) return true;
+
+      // Check if user has reached the free message limit
+      if (user.freeMessageCount >= user.freeMessageLimit) {
+        return false;
+      }
+
+      // Increment message count
+      user.freeMessageCount += 1;
+      await user.save();
+
+      return true;
+    } catch (error) {
+      console.error('Error checking message limit:', error);
+      return false;
+    }
   }
 
   initialize(server) {
@@ -126,6 +189,34 @@ class SocketService {
             console.log('❌ Backend: Chat not found or access denied:', chatId);
             socket.emit('error', { message: 'Chat not found or access denied' });
             return;
+          }
+
+          // Check message limit for free users
+          const canSendMessage = await this.checkMessageLimit(socket.userId);
+          if (!canSendMessage) {
+            console.log('❌ Backend: Message limit reached for user:', socket.userId);
+            socket.emit('error', {
+              message: 'You have reached the free message limit. Please subscribe to continue chatting.',
+              restricted: true,
+              subscriptionRequired: true,
+              messageLimitReached: true
+            });
+            return;
+          }
+
+          // Check if message contains phone numbers and user has subscription
+          if (this.containsPhoneNumber(content)) {
+            const userHasSubscription = await this.hasActiveSubscription(socket.userId);
+            
+            if (!userHasSubscription) {
+              console.log('❌ Backend: Phone number sharing not allowed for user:', socket.userId);
+              socket.emit('error', {
+                message: 'Sharing phone numbers is not allowed. Please subscribe to send messages containing phone numbers.',
+                restricted: true,
+                subscriptionRequired: true
+              });
+              return;
+            }
           }
 
           // Create new message

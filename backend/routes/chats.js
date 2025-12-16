@@ -2,9 +2,73 @@ import express from 'express';
 import { body, validationResult } from 'express-validator';
 import Chat from '../models/Chat.js';
 import User from '../models/User.js';
+import Profile from '../models/Profile.js';
+import Subscription from '../models/Subscription.js';
 import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Phone number detection patterns
+const PHONE_PATTERNS = [
+  /\+?\d{1,4}[-.\s]?\(?\d{1,3}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}/g, // International format
+  /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/g, // US format
+  /\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/g, // US format with parentheses
+  /\+?\d{10,15}/g, // Simple 10-15 digit format
+];
+
+// Function to detect phone numbers in text
+function containsPhoneNumber(text) {
+  if (!text || typeof text !== 'string') return false;
+  
+  for (const pattern of PHONE_PATTERNS) {
+    const matches = text.match(pattern);
+    if (matches) {
+      // Filter out obviously non-phone numbers
+      const validNumbers = matches.filter(number =>
+        number.replace(/\D/g, '').length >= 10
+      );
+      if (validNumbers.length > 0) return true;
+    }
+  }
+  return false;
+}
+
+// Function to check if user has active subscription
+async function hasActiveSubscription(userId) {
+  try {
+    const subscription = await Subscription.getActiveSubscription(userId);
+    return subscription !== null;
+  } catch (error) {
+    console.error('Error checking subscription:', error);
+    return false;
+  }
+}
+
+// Function to check and increment message count for free users
+async function checkMessageLimit(userId) {
+  try {
+    const user = await User.findById(userId);
+    if (!user) return false;
+
+    // If user has subscription, no limits
+    const hasSubscription = await hasActiveSubscription(userId);
+    if (hasSubscription) return true;
+
+    // Check if user has reached the free message limit
+    if (user.freeMessageCount >= user.freeMessageLimit) {
+      return false;
+    }
+
+    // Increment message count
+    user.freeMessageCount += 1;
+    await user.save();
+
+    return true;
+  } catch (error) {
+    console.error('Error checking message limit:', error);
+    return false;
+  }
+}
 
 // @route   GET /api/chats
 // @desc    Get user's chats
@@ -73,6 +137,35 @@ router.post(
         return res.status(404).json({
           success: false,
           message: 'Participant not found'
+        });
+      }
+
+      // Get both users' profiles to check gender compatibility
+      const currentUserProfile = await Profile.findOne({ userId: req.user.id });
+      const participantProfile = await Profile.findOne({ userId: participantId });
+
+      if (!currentUserProfile) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please create a profile first'
+        });
+      }
+
+      if (!participantProfile) {
+        return res.status(400).json({
+          success: false,
+          message: 'Participant has not created a profile yet'
+        });
+      }
+
+      // Check gender compatibility (only allow opposite gender chats)
+      const currentUserGender = currentUserProfile.gender;
+      const participantGender = participantProfile.gender;
+
+      if (currentUserGender === participantGender) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only chat with users of the opposite gender'
         });
       }
 
@@ -229,6 +322,32 @@ router.post(
           success: false,
           message: 'Access denied'
         });
+      }
+
+      // Check message limit for free users
+      const canSendMessage = await checkMessageLimit(req.user.id);
+      if (!canSendMessage) {
+        return res.status(403).json({
+          success: false,
+          message: 'You have reached the free message limit. Please subscribe to continue chatting.',
+          restricted: true,
+          subscriptionRequired: true,
+          messageLimitReached: true
+        });
+      }
+
+      // Check if message contains phone numbers and user has subscription
+      if (containsPhoneNumber(content)) {
+        const userHasSubscription = await hasActiveSubscription(req.user.id);
+        
+        if (!userHasSubscription) {
+          return res.status(403).json({
+            success: false,
+            message: 'Sharing phone numbers is not allowed. Please subscribe to send messages containing phone numbers.',
+            restricted: true,
+            subscriptionRequired: true
+          });
+        }
       }
 
       // Create new message

@@ -25,6 +25,24 @@ const userSchema = new mongoose.Schema({
     type: String,
     sparse: true
   },
+  phoneNumber: {
+    type: String,
+    trim: true,
+    match: [/^\+?[1-9]\d{1,14}$/, 'Please provide a valid phone number']
+  },
+  phoneNumberVisibility: {
+    type: String,
+    enum: ['public', 'subscribers', 'private'],
+    default: 'private'
+  },
+  freeMessageCount: {
+    type: Number,
+    default: 0
+  },
+  freeMessageLimit: {
+    type: Number,
+    default: 5
+  },
   createdAt: {
     type: Date,
     default: Date.now

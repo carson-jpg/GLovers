@@ -34,6 +34,11 @@ const timelinePostSchema = new mongoose.Schema({
       type: String,
       required: true
     },
+    gender: {
+      type: String,
+      required: true,
+      enum: ['male', 'female', 'other']
+    },
     avatarUrl: String,
     location: String
   },
@@ -70,6 +75,7 @@ timelinePostSchema.pre('save', async function(next) {
         this.profile = {
           _id: profile._id,
           fullName: profile.fullName,
+          gender: profile.gender,
           avatarUrl: profile.avatarUrl,
           location: profile.location
         };

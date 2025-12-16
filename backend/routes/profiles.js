@@ -218,11 +218,33 @@ router.put(
 );
 
 // @route   GET /api/profiles
-// @desc    Get all profiles (for browsing)
+// @desc    Get profiles of opposite gender (for browsing)
 // @access  Private
 router.get('/', protect, async (req, res) => {
   try {
-    const profiles = await Profile.find({})
+    // Get current user's profile to determine their gender
+    const currentUserProfile = await Profile.findOne({ userId: req.user.id });
+    
+    if (!currentUserProfile) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please create a profile first'
+      });
+    }
+
+    // Define opposite gender filter
+    let oppositeGenderFilter = {};
+    if (currentUserProfile.gender === 'male') {
+      oppositeGenderFilter = { gender: 'female' };
+    } else if (currentUserProfile.gender === 'female') {
+      oppositeGenderFilter = { gender: 'male' };
+    }
+    // If gender is 'other', show all profiles (or you could customize this logic)
+
+    const profiles = await Profile.find({
+      userId: { $ne: req.user.id }, // Exclude current user
+      ...oppositeGenderFilter
+    })
       .populate('userId', 'email')
       .sort({ createdAt: -1 });
 

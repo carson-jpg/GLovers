@@ -98,13 +98,28 @@ export default function Discover() {
           }
         });
         setLikedPosts(userLikes);
+      } else {
+        // Handle specific errors
+        if (response.message?.includes('profile')) {
+          toast({
+            variant: 'destructive',
+            title: 'Profile Required',
+            description: 'Please create a profile to discover people',
+          });
+        } else {
+          toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: response.message || 'Failed to load discover feed',
+          });
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch discover posts:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to load discover feed',
+        description: error.message || 'Failed to load discover feed',
       });
     } finally {
       setIsLoading(false);
@@ -221,14 +236,24 @@ export default function Discover() {
           <Card className="border-border/50">
             <CardContent className="text-center py-12">
               <Users className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No posts to discover yet</h3>
-              <p className="text-muted-foreground mb-4">Be the first to share something amazing!</p>
-              <Link to="/timeline">
-                <Button>
-                  <Heart className="w-4 h-4 mr-2" />
-                  Create a Post
-                </Button>
-              </Link>
+              <h3 className="text-lg font-semibold mb-2">No compatible profiles found</h3>
+              <p className="text-muted-foreground mb-4">
+                There are no profiles from the opposite gender in your area yet.
+              </p>
+              <div className="space-y-2">
+                <Link to="/timeline">
+                  <Button variant="outline" className="mr-2">
+                    <Heart className="w-4 h-4 mr-2" />
+                    Create a Post
+                  </Button>
+                </Link>
+                <Link to="/profile">
+                  <Button>
+                    <User className="w-4 h-4 mr-2" />
+                    Update Profile
+                  </Button>
+                </Link>
+              </div>
             </CardContent>
           </Card>
         ) : (

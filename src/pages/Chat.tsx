@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import CallInterface from '@/components/CallInterface';
+import PhoneNumberRestrictionWarning from '@/components/PhoneNumberRestrictionWarning';
+import MessageLimitWarning from '@/components/MessageLimitWarning';
 import {
   ArrowLeft,
   Send,
@@ -95,6 +97,8 @@ export default function Chat() {
   const [editContent, setEditContent] = useState('');
   const [connectedUsers, setConnectedUsers] = useState<Set<string>>(new Set());
   const [userStatuses, setUserStatuses] = useState<Map<string, { status: string; lastSeen?: string }>>(new Map());
+  const [showPhoneRestrictionWarning, setShowPhoneRestrictionWarning] = useState(false);
+  const [showMessageLimitWarning, setShowMessageLimitWarning] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
@@ -244,8 +248,17 @@ export default function Chat() {
       socketService.sendMessage(chatId, newMessage.trim());
       setNewMessage('');
       socketService.stopTyping(chatId);
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Failed to send message' });
+    } catch (error: any) {
+      // Check if the error is due to message limit
+      if (error.message && error.message.includes('free message limit')) {
+        setShowMessageLimitWarning(true);
+      }
+      // Check if the error is due to phone number restriction
+      else if (error.message && error.message.includes('phone numbers')) {
+        setShowPhoneRestrictionWarning(true);
+      } else {
+        toast({ variant: 'destructive', title: 'Error', description: 'Failed to send message' });
+      }
     } finally {
       setIsSending(false);
     }
@@ -599,6 +612,16 @@ export default function Chat() {
 
       <CallInterface isOpen={isCallModalOpen} onClose={() => setIsCallModalOpen(false)}
         callState={callState} callConfig={callConfig} recipientInfo={recipientInfo} />
+      
+      <PhoneNumberRestrictionWarning
+        isOpen={showPhoneRestrictionWarning}
+        onClose={() => setShowPhoneRestrictionWarning(false)}
+      />
+      
+      <MessageLimitWarning
+        isOpen={showMessageLimitWarning}
+        onClose={() => setShowMessageLimitWarning(false)}
+      />
     </div>
   );
 }

@@ -25,11 +25,34 @@ const upload = multer({
 });
 
 // @route   GET /api/timeline/posts
-// @desc    Get timeline posts
+// @desc    Get timeline posts from opposite gender users
 // @access  Private
 router.get('/posts', protect, async (req, res) => {
   try {
-    const posts = await TimelinePost.find({ isActive: true })
+    // Get current user's profile to determine their gender
+    const currentUserProfile = await Profile.findOne({ userId: req.user.id });
+    
+    if (!currentUserProfile) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please create a profile first'
+      });
+    }
+
+    // Define opposite gender filter
+    let oppositeGenderFilter = {};
+    if (currentUserProfile.gender === 'male') {
+      oppositeGenderFilter = { 'profile.gender': 'female' };
+    } else if (currentUserProfile.gender === 'female') {
+      oppositeGenderFilter = { 'profile.gender': 'male' };
+    }
+    // If gender is 'other', show all posts (or customize as needed)
+
+    const posts = await TimelinePost.find({
+      isActive: true,
+      userId: { $ne: req.user.id }, // Exclude current user's own posts
+      ...oppositeGenderFilter
+    })
       .populate('userId', 'email')
       .sort({ createdAt: -1 })
       .limit(50);
