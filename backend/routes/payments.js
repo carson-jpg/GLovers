@@ -47,6 +47,22 @@ router.post(
         }
       });
 
+      // Validate M-Pesa configuration before proceeding
+      try {
+        mpesaService.validateConfig();
+      } catch (configError) {
+        await Payment.findByIdAndUpdate(payment._id, {
+          status: 'failed',
+          'metadata.error': `Configuration error: ${configError.message}`
+        });
+
+        return res.status(500).json({
+          success: false,
+          message: 'Payment service configuration error',
+          error: configError.message
+        });
+      }
+
       // Initiate STK Push
       const mpesaResponse = await mpesaService.initiateStkPush(phoneNumber, amount);
 
@@ -68,15 +84,30 @@ router.post(
         });
       } else {
         // Update payment status to failed
+        const errorMessage = mpesaResponse.error?.message || 'Unknown error';
+        const errorCode = mpesaResponse.error?.code || 'UNKNOWN_ERROR';
+        
         await Payment.findByIdAndUpdate(payment._id, {
           status: 'failed',
-          'metadata.error': mpesaResponse.error
+          'metadata.error': errorMessage,
+          'metadata.errorCode': errorCode
         });
+
+        // Provide specific error messages based on error code
+        let userMessage = 'Failed to initiate payment';
+        if (errorCode === '404.001.03') {
+          userMessage = 'Payment service configuration error. Please contact support.';
+        } else if (errorMessage.includes('Invalid')) {
+          userMessage = 'Invalid payment details. Please check your phone number and amount.';
+        }
 
         res.status(400).json({
           success: false,
-          message: 'Failed to initiate payment',
-          error: mpesaResponse.error
+          message: userMessage,
+          error: {
+            code: errorCode,
+            details: mpesaResponse.error
+          }
         });
       }
     } catch (error) {
