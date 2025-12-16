@@ -18,6 +18,7 @@ import Payment from "./pages/Payment";
 import Discover from "./pages/Discover";
 import CallLogs from "./pages/CallLogs";
 import NotFound from "./pages/NotFound";
+import TestPage from "./pages/TestPage";
 import MobileNav from "./components/MobileNav";
 import { Capacitor } from "@capacitor/core";
 import { MobileUtils } from "./lib/mobile-utils";
@@ -59,6 +60,7 @@ const App = () => (
                 <Route path="/subscription" element={<Subscription />} />
                 <Route path="/payment" element={<Payment />} />
                 <Route path="/call-logs" element={<CallLogs />} />
+                <Route path="/test" element={<TestPage />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
