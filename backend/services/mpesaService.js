@@ -6,9 +6,11 @@ class MpesaService {
     this.consumerKey = process.env.MPESA_CONSUMER_KEY;
     this.consumerSecret = process.env.MPESA_CONSUMER_SECRET;
     this.shortcode = process.env.MPESA_SHORTCODE;
+    this.tillNumber = process.env.MPESA_TILL_NUMBER;
+    this.storeNumber = process.env.MPESA_STORE_NUMBER;
     this.passkey = process.env.MPESA_PASSKEY;
     this.environment = process.env.MPESA_ENVIRONMENT || 'sandbox';
-    
+
     this.baseURL = this.environment === 'sandbox'
       ? 'https://sandbox.safaricom.co.ke'
       : 'https://api.safaricom.co.ke';
@@ -22,6 +24,8 @@ class MpesaService {
       hasConsumerKey: !!this.consumerKey,
       hasConsumerSecret: !!this.consumerSecret,
       hasShortcode: !!this.shortcode,
+      hasTillNumber: !!this.tillNumber,
+      hasStoreNumber: !!this.storeNumber,
       hasPasskey: !!this.passkey,
       environment: this.environment,
       baseURL: this.baseURL
@@ -123,13 +127,13 @@ class MpesaService {
 
   // Validate M-Pesa configuration
   validateConfig() {
-    const requiredFields = ['consumerKey', 'consumerSecret', 'shortcode', 'passkey'];
+    const requiredFields = ['consumerKey', 'consumerSecret', 'shortcode', 'tillNumber', 'storeNumber', 'passkey'];
     const missingFields = requiredFields.filter(field => !this[field]);
-    
+
     if (missingFields.length > 0) {
       throw new Error(`Missing M-Pesa configuration: ${missingFields.join(', ')}`);
     }
-    
+
     return true;
   }
 
