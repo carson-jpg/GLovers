@@ -168,17 +168,17 @@ class MpesaService {
       const { password, timestamp } = this.generatePassword();
 
       const requestBody = {
-        BusinessShortCode: this.shortcode,
+        BusinessShortCode: "HO",
         Password: password,
         Timestamp: timestamp,
-        TransactionType: 'CustomerPayBillOnline',
+        TransactionType: 'CustomerBuyGoodsOnline',
         Amount: Math.round(amount),
         PartyA: formattedPhone,
         PartyB: this.shortcode,
         PhoneNumber: formattedPhone,
         CallBackURL: `${process.env.BACKEND_URL || 'http://localhost:3000'}/api/payments/callback`,
-        AccountReference: 'KenyaConnect',
-        TransactionDesc: 'Subscription Payment'
+        AccountReference: 'Glovers',
+        TransactionDesc: 'Buy Goods Payment'
       };
 
       console.log('Initiating STK Push:', {
