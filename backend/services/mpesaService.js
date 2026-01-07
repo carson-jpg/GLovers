@@ -168,7 +168,7 @@ class MpesaService {
       const { password, timestamp } = this.generatePassword();
 
       const requestBody = {
-        BusinessShortCode: "HO",
+        BusinessShortCode: this.shortcode,
         Password: password,
         Timestamp: timestamp,
         TransactionType: 'CustomerBuyGoodsOnline',
