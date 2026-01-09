@@ -178,7 +178,7 @@ class MpesaService {
         TransactionType: 'CustomerBuyGoodsOnline',
         Amount: Math.round(amount),
         PartyA: formattedPhone,
-        PartyB: this.shortcode,
+        PartyB: this.tillNumber,
         PhoneNumber: formattedPhone,
         CallBackURL: `${process.env.BACKEND_URL || 'http://localhost:3000'}/api/payments/callback`,
         AccountReference: 'Glovers',
